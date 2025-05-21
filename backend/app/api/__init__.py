@@ -1,14 +1,13 @@
+# backend/app/api/__init__.py
+
+from . import routes
 from flask_smorest import Blueprint
 
-# Vytvoření Blueprintu pro API verze 1
-# První argument: název blueprintu
-# Druhý argument: __name__ (pro hledání zdrojů)
-# url_prefix: prefix pro všechny routy v tomto blueprintu
-# description: popis pro OpenAPI dokumentaci
-api_v1_bp = Blueprint(
-    "api_v1", __name__, url_prefix="/api/v1", description="API Verze 1 pro IS Šablonu"
+api_bp = Blueprint(
+    "api_v1",              # interní jméno blueprintu
+    __name__,
+    url_prefix="/api/v1",  # URL prefix pro všechny endpointy
+    description="API Verze 1"
 )
 
-# Import rout, aby se registrovaly v blueprintu
-# Důležité: importujte až po vytvoření blueprintu, aby se zabránilo cyklickým importům
-from . import routes
+# Naimportujeme routes.py, aby se k tomu blueprintu endpointy přidaly

@@ -1,166 +1,135 @@
-# Tento soubor definuje API endpointy pomocí Flask-Smorest.
-# Flask-Smorest využívá Marshmallow schémata pro validaci a serializaci
-# a MethodView pro strukturování endpointů.
+# backend/app/api/routes.py
 
-from flask.views import MethodView  # Základní třída pro pohledy založené na třídách
-from flask_smorest import abort  # Funkce pro HTTP chyby a Blueprint z Flask-Smorest
+from flask.views import MethodView
+from flask_smorest import abort
+from sqlalchemy.exc import IntegrityError
 
-# Poznámka: Váš kód importuje Blueprint z . (api_v1_bp = Blueprint(...)), což je také v pořádku.
-# Zde předpokládáme, že api_v1_bp je instance Blueprint definovaná v api/__init__.py
+from ..db import db
+from ..models import (
+    Zakaznik, VernostniUcet, Rezervace, Stul, Salonek,
+    PodnikovaAkce, Objednavka, PolozkaObjednavky,
+    Platba, Hodnoceni, PolozkaMenu, JidelniPlan,
+    PolozkaJidelnihoPlanu, Alergen, Notifikace, PolozkaMenuAlergen
+)
+from ..schemas import (
+    ZakaznikSchema, ZakaznikCreateSchema,
+    VernostniUcetSchema, VernostniUcetCreateSchema,
+    RezervaceSchema, RezervaceCreateSchema,
+    StulSchema, StulCreateSchema,
+    SalonekSchema, SalonekCreateSchema,
+    PodnikovaAkceSchema, PodnikovaAkceCreateSchema,
+    ObjednavkaSchema, ObjednavkaCreateSchema,
+    PolozkaObjednavkySchema, PolozkaObjednavkyCreateSchema,
+    PlatbaSchema, PlatbaCreateSchema,
+    HodnoceniSchema, HodnoceniCreateSchema,
+    PolozkaMenuSchema, PolozkaMenuCreateSchema,
+    JidelniPlanSchema, JidelniPlanCreateSchema,
+    PolozkaJidelnihoPlanuSchema, PolozkaJidelnihoPlanuCreateSchema,
+    AlergenSchema, AlergenCreateSchema,
+    NotifikaceSchema, NotifikaceCreateSchema,
+    PolozkaMenuAlergenSchema, PolozkaMenuAlergenCreateSchema
+)
+from . import api_bp
 
-# Importy z vaší aplikace
-from ..models import User  # Import databázového modelu User
-from ..schemas import UserSchema, UserCreateSchema  # Import Marshmallow schémat
-from ..db import db  # Import instance SQLAlchemy databáze
-from sqlalchemy.exc import IntegrityError  # Pro odchytávání chyb unikátnosti
-from . import api_v1_bp
 
-# Zde by měla být instance Blueprint, např.:
-# api_v1_bp = Blueprint('api_v1', __name__, url_prefix='/api/v1', description='API verze 1')
-# Tento kód předpokládá, že `api_v1_bp` již existuje (importováno z __init__.py)
+def _register_crud(model, schema, create_schema, url_prefix, pk_field):
+    @api_bp.route(url_prefix)
+    class ListResource(MethodView):
+        @api_bp.response(200, schema(many=True))
+        def get(self):
+            return db.session.scalars(db.select(model)).all()
 
-# --- Endpointy pro uživatele ---
+        @api_bp.arguments(create_schema)
+        @api_bp.response(201, schema)
+        def post(self, data):
+            obj = model(**data)
+            try:
+                db.session.add(obj)
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
+                abort(409, message="Duplicitní nebo neplatný záznam.")
+            return obj
+
+    @api_bp.route(f"{url_prefix}/<int:{pk_field}>")
+    class ItemResource(MethodView):
+        @api_bp.response(200, schema)
+        def get(self, **kwargs):
+            obj = db.session.get(model, kwargs[pk_field])
+            if not obj:
+                abort(404, message=f"{model.__name__} nenalezen.")
+            return obj
+
+        @api_bp.arguments(schema)
+        @api_bp.response(200, schema)
+        def put(self, data, **kwargs):
+            obj = db.session.get(model, kwargs[pk_field])
+            if not obj:
+                abort(404, message=f"{model.__name__} nenalezen.")
+            for k, v in data.items():
+                setattr(obj, k, v)
+            db.session.commit()
+            return obj
+
+        @api_bp.response(204)
+        def delete(self, **kwargs):
+            obj = db.session.get(model, kwargs[pk_field])
+            if not obj:
+                abort(404, message=f"{model.__name__} nenalezen.")
+            db.session.delete(obj)
+            db.session.commit()
+            return ""
 
 
-@api_v1_bp.route("/users")  # Dekorátor registruje třídu pro danou cestu na blueprintu
-class UsersResource(MethodView):
-    """
-    Resource pro operace s kolekcí uživatelů (/users).
-    Zpracovává GET (seznam) a POST (vytvoření).
-    """
+# Registrace 15 entit s jednoduchým PK
+_register_crud(Zakaznik, ZakaznikSchema, ZakaznikCreateSchema,
+               "/zakaznik", "id_zakaznika")
+# … tady pokračuj zbylými 14 …
+_register_crud(Notifikace, NotifikaceSchema,
+               NotifikaceCreateSchema, "/notifikace", "id_notifikace")
 
-    @api_v1_bp.response(200, UserSchema(many=True))
-    # Dekorátor definuje úspěšnou odpověď (HTTP 200 OK).
-    # - UserSchema(many=True): Určuje, že odpověď bude seznam objektů,
-    #   které budou serializovány pomocí UserSchema.
-    # - Automaticky generuje dokumentaci pro OpenAPI (Swagger).
+# Manuální CRUD pro composite-key entitu PolozkaMenuAlergen
+pma_schema = PolozkaMenuAlergenSchema()
+pma_schema_list = PolozkaMenuAlergenSchema(many=True)
+pma_schema_partial = PolozkaMenuAlergenSchema(partial=True)
+pma_schema_create = PolozkaMenuAlergenCreateSchema()
+
+
+@api_bp.route("/polozkaMenuAlergen")
+class PolozkaMenuAlergenList(MethodView):
+    @api_bp.response(200, pma_schema_list)
     def get(self):
-        """Získat seznam všech uživatelů."""
-        # Použití moderního stylu SQLAlchemy 2.0 pro dotazování
-        stmt = db.select(User).order_by(User.username)
-        # scalars() vrátí jednotlivé hodnoty (objekty User), all() je načte
-        users = db.session.scalars(stmt).all()
-        # Flask-Smorest se postará o serializaci pomocí UserSchema(many=True)
-        return users
+        return PolozkaMenuAlergen.query.all()
 
-    @api_v1_bp.arguments(UserCreateSchema)
-    # Dekorátor definuje očekávaná vstupní data v těle požadavku.
-    # - UserCreateSchema: Určuje Marshmallow schéma pro validaci vstupních dat.
-    # - Pokud validace selže, automaticky vrátí chybu 422 Unprocessable Entity.
-    # - Validovaná data jsou předána jako argument metody (zde 'new_user_data').
-    @api_v1_bp.response(201, UserSchema)
-    # Dekorátor definuje úspěšnou odpověď pro vytvoření (HTTP 201 Created).
-    # - UserSchema: Určuje, že odpověď bude jeden objekt serializovaný pomocí UserSchema.
-    def post(self, new_user_data):
-        """
-        Vytvořit nového uživatele.
-        Očekává data podle UserCreateSchema v těle POST požadavku.
-        """
-        # Kontrola, zda uživatel s daným emailem nebo username již neexistuje
-        if User.query.filter(
-            (User.username == new_user_data["username"])
-            | (User.email == new_user_data["email"])
-        ).first():
-            abort(
-                409, message="Uživatel s tímto jménem nebo emailem již existuje."
-            )  # Conflict
-
-        # Vytvoření instance modelu User z validovaných dat
-        user = User(**new_user_data)
-
-        # !!! DŮLEŽITÉ: Zde by mělo dojít k hashování hesla před uložením!
-        # Např. pomocí knihovny passlib nebo werkzeug.security
-        # user.set_password(new_user_data['password']) # Předpokládá metodu v modelu User
-
-        try:
-            db.session.add(user)
-            db.session.commit()
-        except IntegrityError as e:  # Specifická chyba pro porušení unikátnosti
-            db.session.rollback()
-            # Logování chyby by bylo vhodné
-            # print(f"IntegrityError: {e}")
-            abort(
-                409,  # Conflict - lepší než 500, pokud jde o unikátnost
-                message=f"Chyba při ukládání: Uživatel s těmito údaji již pravděpodobně existuje.",
-            )
-        except Exception as e:  # Obecná chyba pro jiné problémy
-            db.session.rollback()
-            # Logování chyby
-            # print(f"Exception: {e}")
-            abort(500, message="Interní chyba serveru při ukládání uživatele.")
-        # Vrácení nově vytvořeného uživatele (serializace proběhne automaticky)
-        return user
+    @api_bp.arguments(pma_schema_create)
+    @api_bp.response(201, pma_schema)
+    def post(self, data):
+        obj = PolozkaMenuAlergen(**data)
+        db.session.add(obj)
+        db.session.commit()
+        return obj
 
 
-@api_v1_bp.route("/users/<int:user_id>")  # Cesta s parametrem user_id
-class UserResource(MethodView):
-    """
-    Resource pro operace s konkrétním uživatelem (/users/<id>).
-    Zpracovává GET (detail), PUT (aktualizace), DELETE (smazání).
-    """
+@api_bp.route("/polozkaMenuAlergen/<int:id_menu_polozka>/<int:id_alergenu>")
+class PolozkaMenuAlergenResource(MethodView):
+    @api_bp.response(200, pma_schema)
+    def get(self, id_menu_polozka, id_alergenu):
+        return PolozkaMenuAlergen.query.get_or_404((id_menu_polozka, id_alergenu))
 
-    @api_v1_bp.response(200, UserSchema)
-    # Odpověď pro úspěšné nalezení (HTTP 200 OK), serializovaná UserSchema.
-    def get(self, user_id):
-        """Získat detail uživatele podle ID."""
-        # Použití metody get_or_404 pro snadné získání záznamu nebo vrácení 404 Not Found
-        user = db.session.get(User, user_id)  # Moderní způsob získání podle PK
-        if user is None:
-            abort(404, message="Uživatel nebyl nalezen.")
-        # Alternativa: user = User.query.get_or_404(user_id, description="Uživatel nebyl nalezen.")
-        return user
+    @api_bp.arguments(pma_schema_partial)
+    @api_bp.response(200, pma_schema)
+    def put(self, data, id_menu_polozka, id_alergenu):
+        obj = PolozkaMenuAlergen.query.get_or_404(
+            (id_menu_polozka, id_alergenu))
+        for k, v in data.items():
+            setattr(obj, k, v)
+        db.session.commit()
+        return obj
 
-    @api_v1_bp.arguments(
-        UserSchema
-    )  # Předpokládáme UserSchema pro update, možná budete chtít UserUpdateSchema
-    @api_v1_bp.response(200, UserSchema)
-    def put(self, update_data, user_id):
-        """
-        Aktualizovat existujícího uživatele (celý záznam).
-        Očekává data podle UserSchema v těle PUT požadavku.
-        """
-        user = db.session.get(User, user_id)
-        if user is None:
-            abort(404, message="Uživatel nebyl nalezen.")
-
-        # Aktualizace atributů - pozor na heslo!
-        # Heslo by se mělo aktualizovat pouze pokud je zadáno a mělo by být hashováno.
-        # Je lepší mít samostatný endpoint pro změnu hesla nebo specifické schéma.
-        for key, value in update_data.items():
-            # Zabráníme přímému přepsání hesla, pokud není explicitně řešeno
-            if key != "password":
-                setattr(user, key, value)
-
-        # Příklad aktualizace hesla, pokud je v datech a je neprázdné:
-        # if 'password' in update_data and update_data['password']:
-        #    user.set_password(update_data['password']) # Opět, nutné hashování
-
-        try:
-            db.session.commit()
-        except Exception as e:
-            db.session.rollback()
-            abort(500, message="Interní chyba serveru při aktualizaci uživatele.")
-        return user
-
-    @api_v1_bp.response(204)  # Odpověď HTTP 204 No Content pro úspěšné smazání
-    def delete(self, user_id):
-        """Smazat uživatele podle ID."""
-        user = db.session.get(User, user_id)
-        if user is None:
-            abort(404, message="Uživatel nebyl nalezen.")
-
-        try:
-            db.session.delete(user)
-            db.session.commit()
-        except Exception as e:
-            db.session.rollback()
-            abort(500, message="Interní chyba serveru při mazání uživatele.")
-
-        # Při úspěšném smazání se vrací prázdná odpověď s kódem 204
+    @api_bp.response(204)
+    def delete(self, id_menu_polozka, id_alergenu):
+        obj = PolozkaMenuAlergen.query.get_or_404(
+            (id_menu_polozka, id_alergenu))
+        db.session.delete(obj)
+        db.session.commit()
         return ""
-
-
-# Zde můžete přidat další Resources pro jiné části vašeho API
-# např. Events, Registrations, atd.
-# @api_v1_bp.route("/events")
-# class EventsResource(MethodView): ...

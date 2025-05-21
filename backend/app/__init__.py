@@ -1,69 +1,95 @@
+# backend/app/__init__.py
+
+import os
 from flask import Flask
 from flask_smorest import Api
+
 from .config import config_by_name
 from .db import db, migrate
-import os
 
-# Naimportujte všechny modely, které chcete v shellu používat
+# Import všech modelů, aby je Flask-Migrate “viděl”
 from .models import (
-    User,
-    Table,
-    Reservation,
-    MenuItem,
-    Order,
-    OrderItem,
-    Review,
-    FavoriteDish,
-    Promotion,
-    Notification,
-    LoyaltyHistory,
+    Zakaznik,
+    VernostniUcet,
+    Rezervace,
+    Stul,
+    Salonek,
+    PodnikovaAkce,
+    Objednavka,
+    PolozkaObjednavky,
+    Platba,
+    Hodnoceni,
+    PolozkaMenu,
+    PolozkaMenuAlergen,
+    JidelniPlan,
+    PolozkaJidelnihoPlanu,
+    Alergen,
+    Notifikace
 )
 
 
 def create_app(config_name=None, config_override=None):
-    """Factory funkce pro vytvoření Flask aplikace."""
+    # 1) název konfigurace
     if config_name is None:
         config_name = os.getenv("FLASK_CONFIG", "default")
 
+    # 2) vytvoření Flask-app instance
     app = Flask(__name__)
 
+    # 3) načtení konfigurace (development / testing / production)
     if config_override:
         app.config.from_object(config_override)
     else:
         app.config.from_object(config_by_name[config_name])
 
-    # Inicializace rozšíření
+    # 4) inicializace rozšíření
     db.init_app(app)
     migrate.init_app(app, db)
 
-    # Inicializace Flask-Smorest
-    api = Api(app)
+    # 5) inicializace Swagger/OpenAPI + unikátní názvy schémat
+    api = Api(
+        app,
+        spec_kwargs={
+            "schema_name_resolver": lambda schema: (
+                schema.__class__.__name__
+                .replace("Schema", "")
+                + ("List" if getattr(schema, "many",   False) else "")
+                + ("Partial" if getattr(schema, "partial", False) else "")
+            )
+        }
+    )
 
-    # Registrace Blueprintů
-    from .api import api_v1_bp
-    api.register_blueprint(api_v1_bp)
+    # 6) registrace hlavního blueprintu pro API v1
+    from .api import api_bp
+    api.register_blueprint(api_bp)
 
-    # Shell kontext pro `flask shell`
+    # 7) shell-context pro flask shell (flask shell → import všeho)
     @app.shell_context_processor
     def make_shell_context():
         return {
             "db": db,
-            # tady všechny modely
-            "User": User,
-            "Table": Table,
-            "Reservation": Reservation,
-            "MenuItem": MenuItem,
-            "Order": Order,
-            "OrderItem": OrderItem,
-            "Review": Review,
-            "FavoriteDish": FavoriteDish,
-            "Promotion": Promotion,
-            "Notification": Notification,
-            "LoyaltyHistory": LoyaltyHistory,
+            "Zakaznik":           Zakaznik,
+            "VernostniUcet":      VernostniUcet,
+            "Rezervace":          Rezervace,
+            "Stul":               Stul,
+            "Salonek":            Salonek,
+            "PodnikovaAkce":      PodnikovaAkce,
+            "Objednavka":         Objednavka,
+            "PolozkaObjednavky":  PolozkaObjednavky,
+            "Platba":             Platba,
+            "Hodnoceni":          Hodnoceni,
+            "PolozkaMenu":        PolozkaMenu,
+            "PolozkaMenuAlergen": PolozkaMenuAlergen,
+            "JidelniPlan":        JidelniPlan,
+            "PolozkaJidelnihoPlanu": PolozkaJidelnihoPlanu,
+            "Alergen":            Alergen,
+            "Notifikace":         Notifikace
         }
 
+    # 8) jednoduchý testovací endpoint
     @app.route("/hello")
     def hello():
         return "Hello, World from Flask!"
 
+    # 9) vracíme finální aplikaci
     return app
