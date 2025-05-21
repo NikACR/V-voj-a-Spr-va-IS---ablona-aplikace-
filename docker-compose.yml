@@ -6,23 +6,22 @@ services:
       context: ./backend
     container_name: is_backend_c
 
-    # Bind-mount lokálního backendu – žádné volume/COPY, žádné přepisy
+    # Původní nastavení – mount celého repa (i s cache)
     volumes:
-      - ./backend:/workspace/backend
+      - .:/workspace:cached
 
     env_file:
       - .env
     environment:
       - FLASK_ENV=development
-      - FLASK_APP=app.main
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
       - DATABASE_HOST=db
       - DATABASE_PORT=5432
 
-    # Spustí Flask aplikaci na 0.0.0.0:8000 s live-reload (přes flask run)
-    command: flask run --host=0.0.0.0 --port=8000
+    # Původní „sleep“, abychom kontejner udrželi běžet
+    command: /bin/sh -c "while sleep 1000; do :; done"
 
     networks:
       - backend
@@ -33,9 +32,8 @@ services:
       context: ./frontend
     container_name: is_frontend_c
 
-    # Bind-mount lokálního frontendu
     volumes:
-      - ./frontend:/workspace/frontend
+      - .:/workspace:cached
 
     ports:
       - "5173:5173"
@@ -43,8 +41,7 @@ services:
       - NODE_ENV=development
       - VITE_SERVER_HOST=0.0.0.0
 
-    # Spuštění Vite dev serveru (uprav podle scriptu ve package.json)
-    command: npm run dev
+    command: /bin/sh -c "while sleep 1000; do :; done"
     depends_on:
       - backend
     networks:
@@ -53,23 +50,18 @@ services:
   db:
     image: postgres:latest
     container_name: is_db_c
-
-    # Data zůstávají v pojmenovaném volume
     volumes:
       - postgres-data:/var/lib/postgresql/data
-
     env_file:
       - .env
     networks:
       - backend
-
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
-
     restart: unless-stopped
 
 volumes:
