@@ -1,10 +1,12 @@
+version: '3.8'
+
 services:
   backend:
     build:
       context: ./backend
     container_name: is_backend_c
 
-    # Bind-mount jen na lokální backend – žádné volume, žádné přepisy
+    # Bind-mount lokálního backendu – žádné volume/COPY, žádné přepisy
     volumes:
       - ./backend:/workspace/backend
 
@@ -12,14 +14,15 @@ services:
       - .env
     environment:
       - FLASK_ENV=development
+      - FLASK_APP=app.main
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
       - DATABASE_HOST=db
       - DATABASE_PORT=5432
 
-    # Spustí se tvá aplikace s live-reload
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    # Spustí Flask aplikaci na 0.0.0.0:8000 s live-reload (přes flask run)
+    command: flask run --host=0.0.0.0 --port=8000
 
     networks:
       - backend
@@ -30,7 +33,7 @@ services:
       context: ./frontend
     container_name: is_frontend_c
 
-    # Bind-mount jen na lokální frontend
+    # Bind-mount lokálního frontendu
     volumes:
       - ./frontend:/workspace/frontend
 
@@ -40,6 +43,7 @@ services:
       - NODE_ENV=development
       - VITE_SERVER_HOST=0.0.0.0
 
+    # Spuštění Vite dev serveru (uprav podle scriptu ve package.json)
     command: npm run dev
     depends_on:
       - backend
@@ -49,18 +53,23 @@ services:
   db:
     image: postgres:latest
     container_name: is_db_c
+
+    # Data zůstávají v pojmenovaném volume
     volumes:
       - postgres-data:/var/lib/postgresql/data
+
     env_file:
       - .env
     networks:
       - backend
+
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+
     restart: unless-stopped
 
 volumes:
