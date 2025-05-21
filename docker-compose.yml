@@ -3,23 +3,24 @@ services:
     build:
       context: ./backend
     container_name: is_backend_c
+
+    # Bind-mount jen na lokální backend – žádné volume, žádné přepisy
     volumes:
-      - .:/workspace:cached
-    # Načtení proměnných z .env souboru
+      - ./backend:/workspace/backend
+
     env_file:
       - .env
     environment:
-      - FLASK_ENV=development # Nebo production
+      - FLASK_ENV=development
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
-      - DATABASE_HOST=db # Název služby databáze
+      - DATABASE_HOST=db
       - DATABASE_PORT=5432
-    # depends_on:
-    #   db:
-    #     # Počká, až bude databáze připravena přijímat spojení
-    #     condition: service_healthy
-    command: /bin/sh -c "while sleep 1000; do :; done"
+
+    # Spustí se tvá aplikace s live-reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
     networks:
       - backend
       - frontend
@@ -28,15 +29,18 @@ services:
     build:
       context: ./frontend
     container_name: is_frontend_c
+
+    # Bind-mount jen na lokální frontend
+    volumes:
+      - ./frontend:/workspace/frontend
+
     ports:
       - "5173:5173"
-    volumes:
-      - .:/workspace:cached
     environment:
       - NODE_ENV=development
-      # Zajistí, že Vite bude naslouchat na všech rozhraních a povolí HMR přes Docker
       - VITE_SERVER_HOST=0.0.0.0
-    command: /bin/sh -c "while sleep 1000; do :; done"
+
+    command: npm run dev
     depends_on:
       - backend
     networks:
@@ -51,32 +55,16 @@ services:
       - .env
     networks:
       - backend
-    # Kontrola stavu databáze
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 10s # Dává DB čas na start před první kontrolou
+      start_period: 10s
     restart: unless-stopped
-    # pgadmin:
-    #   image: dpage/pgadmin4:latest
-    #   restart: unless-stopped
-    #   volumes:
-    #     - pgadmin-data:/var/lib/pgadmin
-    #   environment:
-    #     PGADMIN_DEFAULT_EMAIL: admin@email.com
-    #     PGADMIN_DEFAULT_PASSWORD: secret
-    #     PGADMIN_LISTEN_ADDRESS: 0.0.0.0
-    #     PGADMIN_LISTEN_PORT: 5500
-    #   ports:
-    #     - 5500:5500
-    #   networks:
-    #     - backend
 
 volumes:
   postgres-data:
-    # pgadmin-data:
 
 networks:
   backend:
