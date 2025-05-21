@@ -38,6 +38,7 @@ services:
 
     ports:
       - "5173:5173"
+      - "5000:5000"
     environment:
       - NODE_ENV=development
       - VITE_SERVER_HOST=0.0.0.0
