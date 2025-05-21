@@ -52,5 +52,6 @@
     ], // Port FastAPI aplikace
     // Příkaz po vytvoření kontejneru (např. spuštění migrací)
     // "postCreateCommand": "sleep 5 && alembic upgrade head", // Počkáme 5s na DB a spustíme migrace
-    "postStartCommand": "git config --global --add safe.directory ${containerWorkspaceFolder}"
+    "postStartCommand": "git config --global --add safe.directory ${containerWorkspaceFolder}",
+    //"remoteUser": "root"
 }

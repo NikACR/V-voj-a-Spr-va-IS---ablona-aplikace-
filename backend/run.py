@@ -1,14 +1,36 @@
-from app import create_app, db # Import z lokálního balíčku app
-from app.models import User # Importujte své modely
-import os
+# run.py
 
-# Získání názvu konfigurace z proměnné prostředí nebo default
-config_name = os.getenv('FLASK_CONFIG') or 'default'
+import os
+from app import create_app, db
+# import všech modelů, aby je SQLAlchemy zaregistrovala
+from app.models import (
+    User, Table, Reservation, MenuItem, OrderItem,
+    Order, Review, FavoriteDish, Promotion,
+    Notification, LoyaltyHistory
+)
+
+# vyzvedneme config z proměnné prostředí
+config_name = os.getenv("FLASK_CONFIG", "default")
 app = create_app(config_name)
 
-# Zde můžete přidat příkazy pro Flask CLI pomocí app.cli.command()
-# Například pro vytvoření databáze nebo seedování dat
+# shell-context – Flask shell vám automaticky poskytne tyto objekty
+@app.shell_context_processor
+def make_shell_context():
+    return {
+        "db": db,
+        "User": User,
+        "Table": Table,
+        "Reservation": Reservation,
+        "MenuItem": MenuItem,
+        "OrderItem": OrderItem,
+        "Order": Order,
+        "Review": Review,
+        "FavoriteDish": FavoriteDish,
+        "Promotion": Promotion,
+        "Notification": Notification,
+        "LoyaltyHistory": LoyaltyHistory
+    }
 
-if __name__ == '__main__':
-    # Spuštění vývojového serveru (pro produkci použijte WSGI server jako Gunicorn)
-    app.run(host='0.0.0.0', port=5000) # Naslouchání na všech rozhraních
+if __name__ == "__main__":
+    # ve vývoji
+    app.run(host="0.0.0.0", port=5000, debug=True)
