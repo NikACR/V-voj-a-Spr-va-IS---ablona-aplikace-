@@ -1,13 +1,9 @@
-# backend/app/api/__init__.py
+# app/api/__init__.py
 
-from . import routes
 from flask_smorest import Blueprint
 
-api_bp = Blueprint(
-    "api_v1",              # interní jméno blueprintu
-    __name__,
-    url_prefix="/api/v1",  # URL prefix pro všechny endpointy
-    description="API Verze 1"
-)
+# jednou definujeme blueprint
+api_bp = Blueprint("api", __name__, url_prefix="/api")
 
-# Naimportujeme routes.py, aby se k tomu blueprintu endpointy přidaly
+# import routes spustí decorators, které registrují všechny endpointy
+from . import routes  # noqa

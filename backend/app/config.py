@@ -1,19 +1,27 @@
 import os
 from dotenv import load_dotenv
 
-# Načtení proměnných z .env souboru
-basedir = os.path.abspath(os.path.dirname(__file__))
-load_dotenv(os.path.join(basedir, "../.env"))
+# zjistíme, kde je tento soubor, a skočíme o adresář výš do kořene projektu
+BASEDIR = os.path.abspath(os.path.dirname(__file__))
+DOTENV_PATH = os.path.join(BASEDIR, "..", ".env")
 
+# načteme .env a přepíšeme všechny proměnné prostředí i,
+# pokud už byly exportované v shellu
+load_dotenv(DOTENV_PATH, override=True)
 
 class Config:
     """Základní konfigurace."""
 
-    SECRET_KEY = os.environ.get("SECRET_KEY") or "vychozi_slabý_klíč_pro_vývoj"
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
-    SQLALCHEMY_ECHO = False  # Nastavte na True pro logování SQL dotazů
+    # Diakritiku v JSON vypisujeme přímo, nevytváříme unicode eskapy
+    JSON_AS_ASCII = False
 
-    # Konfigurace pro Flask-Smorest (OpenAPI)
+    SECRET_KEY     = os.environ.get("SECRET_KEY", "vychozi_slabý_klíč_pro_vývoj")
+    JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "jwt_tajny_klic")  # nový řádek
+
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SQLALCHEMY_ECHO              = False
+
+    # konfigurace pro Flask-Smorest / OpenAPI
     API_TITLE = "IS Šablona API"
     API_VERSION = "v1"
     OPENAPI_VERSION = "3.0.2"
@@ -21,54 +29,30 @@ class Config:
     OPENAPI_SWAGGER_UI_PATH = "/swagger"
     OPENAPI_SWAGGER_UI_URL = "https://cdn.jsdelivr.net/npm/swagger-ui-dist/"
 
-
 class DevelopmentConfig(Config):
-    """Konfigurace pro vývoj."""
-
     DEBUG = True
-    SQLALCHEMY_DATABASE_URI = (
-        os.environ.get("DATABASE_URL")
-        or "postgresql+psycopg://user:password@localhost/dev_db"
+    SQLALCHEMY_ECHO = True
+    SQLALCHEMY_DATABASE_URI = os.environ.get(
+        "DATABASE_URL",
+        "postgresql+psycopg://user:password@localhost/dev_db"
     )
-    SQLALCHEMY_ECHO = True  # Logování SQL ve vývoji může být užitečné
-
 
 class TestingConfig(Config):
-    """Konfigurace pro testování."""
-
     TESTING = True
-    SQLALCHEMY_DATABASE_URI = (
-        os.environ.get("TEST_DATABASE_URL")
-        or "sqlite:///:memory:"
+    WTF_CSRF_ENABLED = False
+    SQLALCHEMY_DATABASE_URI = os.environ.get(
+        "TEST_DATABASE_URL",
+        "sqlite:///:memory:"
     )
-    WTF_CSRF_ENABLED = False  # Vypnutí CSRF pro testy formulářů
-
 
 class ProductionConfig(Config):
-    """Konfigurace pro produkci."""
-
     DEBUG = False
     TESTING = False
-    SQLALCHEMY_DATABASE_URI = os.environ.get(
-        "DATABASE_URL"
-    )  # V produkci MUSÍ být nastaveno
-    # Zde další produkční nastavení (logging, security headers, atd.)
+    SQLALCHEMY_DATABASE_URI = os.environ["DATABASE_URL"]
 
-
-# Mapování názvů konfigurací na třídy
-config_by_name = dict(
-    development=DevelopmentConfig,
-    testing=TestingConfig,
-    production=ProductionConfig,
-    default=DevelopmentConfig,
-)
-
-
-# Funkce pro získání klíče (pro SECRET_KEY)
-def get_secret_key():
-    key = os.environ.get("SECRET_KEY")
-    if not key:
-        # V produkci by toto mělo vyvolat chybu nebo použít bezpečnější default
-        print("VAROVÁNÍ: SECRET_KEY není nastaven v .env souboru!")
-        key = "vychozi_slabý_klíč_pro_vývoj_oprav_mne"
-    return key
+config_by_name = {
+    "development": DevelopmentConfig,
+    "testing":    TestingConfig,
+    "production": ProductionConfig,
+    "default":    DevelopmentConfig,
+}

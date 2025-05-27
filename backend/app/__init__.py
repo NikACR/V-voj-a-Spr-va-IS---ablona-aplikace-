@@ -1,95 +1,79 @@
-# backend/app/__init__.py
-
 import os
-from flask import Flask
+import warnings
+from flask import Flask, jsonify
 from flask_smorest import Api
+from flask_jwt_extended import JWTManager
+from werkzeug.exceptions import NotFound, UnprocessableEntity
+
+# potlačíme jen varování z apispecu o duplicitních schématech
+warnings.filterwarnings(
+    "ignore",
+    "Multiple schemas resolved to the name",
+    UserWarning,
+    module="apispec.ext.marshmallow.openapi"
+)
 
 from .config import config_by_name
 from .db import db, migrate
 
-# Import všech modelů, aby je Flask-Migrate “viděl”
+# načteme modely, aby Alembic a apispec viděly metadata
 from .models import (
-    Zakaznik,
-    VernostniUcet,
-    Rezervace,
-    Stul,
-    Salonek,
-    PodnikovaAkce,
-    Objednavka,
-    PolozkaObjednavky,
-    Platba,
-    Hodnoceni,
-    PolozkaMenu,
-    PolozkaMenuAlergen,
-    JidelniPlan,
-    PolozkaJidelnihoPlanu,
-    Alergen,
-    Notifikace
+    Zakaznik, VernostniUcet, Rezervace, Stul, Salonek,
+    PodnikovaAkce, Objednavka, PolozkaObjednavky, Platba,
+    Hodnoceni, PolozkaMenu, PolozkaMenuAlergen,
+    JidelniPlan, PolozkaJidelnihoPlanu, Alergen, Notifikace
 )
 
-
 def create_app(config_name=None, config_override=None):
-    # 1) název konfigurace
-    if config_name is None:
+    if not config_name:
         config_name = os.getenv("FLASK_CONFIG", "default")
 
-    # 2) vytvoření Flask-app instance
     app = Flask(__name__)
 
-    # 3) načtení konfigurace (development / testing / production)
+    # aby flask.json neposílal \uXXXX, ale přímo UTF-8 znaky
+    app.json.ensure_ascii = False
+
     if config_override:
         app.config.from_object(config_override)
     else:
         app.config.from_object(config_by_name[config_name])
 
-    # 4) inicializace rozšíření
+    app.config.setdefault("JSON_AS_ASCII", False)
+
     db.init_app(app)
     migrate.init_app(app, db)
 
-    # 5) inicializace Swagger/OpenAPI + unikátní názvy schémat
-    api = Api(
-        app,
-        spec_kwargs={
-            "schema_name_resolver": lambda schema: (
-                schema.__class__.__name__
-                .replace("Schema", "")
-                + ("List" if getattr(schema, "many",   False) else "")
-                + ("Partial" if getattr(schema, "partial", False) else "")
-            )
-        }
-    )
+    # --- inicializace JWT ---
+    jwt = JWTManager(app)
 
-    # 6) registrace hlavního blueprintu pro API v1
+    # init API a registrace blueprintů
+    api = Api(app)
     from .api import api_bp
+    from .api.auth import auth_bp
     api.register_blueprint(api_bp)
+    api.register_blueprint(auth_bp)
 
-    # 7) shell-context pro flask shell (flask shell → import všeho)
-    @app.shell_context_processor
-    def make_shell_context():
-        return {
-            "db": db,
-            "Zakaznik":           Zakaznik,
-            "VernostniUcet":      VernostniUcet,
-            "Rezervace":          Rezervace,
-            "Stul":               Stul,
-            "Salonek":            Salonek,
-            "PodnikovaAkce":      PodnikovaAkce,
-            "Objednavka":         Objednavka,
-            "PolozkaObjednavky":  PolozkaObjednavky,
-            "Platba":             Platba,
-            "Hodnoceni":          Hodnoceni,
-            "PolozkaMenu":        PolozkaMenu,
-            "PolozkaMenuAlergen": PolozkaMenuAlergen,
-            "JidelniPlan":        JidelniPlan,
-            "PolozkaJidelnihoPlanu": PolozkaJidelnihoPlanu,
-            "Alergen":            Alergen,
-            "Notifikace":         Notifikace
-        }
+    @app.errorhandler(UnprocessableEntity)
+    def handle_validation_error(err):
+        data = getattr(err, 'data', None) or {}
+        messages = data.get('messages', {})
+        return jsonify({
+            "status": "Chybný vstup",
+            "code": 422,
+            "errors": messages
+        }), 422
 
-    # 8) jednoduchý testovací endpoint
+    @app.errorhandler(NotFound)
+    def handle_404(err):
+        msg = err.description or "Nenalezeno"
+        return jsonify({
+            "status": "Nenalezeno",
+            "code": 404,
+            "message": msg
+        }), 404
+
     @app.route("/hello")
     def hello():
         return "Hello, World from Flask!"
 
-    # 9) vracíme finální aplikaci
     return app
