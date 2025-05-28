@@ -35,8 +35,6 @@ class Config:
 
     SQLALCHEMY_ECHO = False
     #   False = nevypisovat raw SQL dotazy do konzole
-    #   ORM (Object-Relational Mapper) automaticky překládá Python objekty
-    #   na „surové“ SQL dotazy, které by bez ORM psal(a) ručně.
 
     # ── Metadata API pro Swagger/OpenAPI ────────────────────────────────
     API_TITLE = "Informační Systém REST API"
@@ -67,12 +65,12 @@ class Config:
     # vyžadovat Bearer JWT na všech endpointů
     OPENAPI_SECURITY = [{"bearerAuth": []}]
 
+    # persistAuthorization = True → tlačítko Authorize si pamatuje token
     OPENAPI_SWAGGER_UI_CONFIG = {
         "persistAuthorization": True
     }
-    #   v Swagger UI si token uložíme a nemusíme ho zadávat znovu
 
-    # ── [NOVÉ] Specifikujeme, aby Swagger UI automaticky vědělo o BearerAuth:
+    # ── Specifikujeme pro flask-smorest, aby Swagger UI vědělo o BearerAuth ──
     API_SPEC_OPTIONS = {
         "security": [{"bearerAuth": []}],
         "components": {
@@ -92,7 +90,7 @@ class DevelopmentConfig(Config):
     """Nastavení pro vývojové prostředí."""
 
     DEBUG = True                             # zapne auto-reload a detailní chyby
-    SQLALCHEMY_ECHO = True                   # True = vypisovat raw SQL pro ladění
+    SQLALCHEMY_ECHO = True                   # vypisovat raw SQL pro ladění
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         "DATABASE_URL",
         "postgresql+psycopg://user:heslo@localhost/dev_db"
@@ -137,7 +135,7 @@ Principy a důležité body
    - load_dotenv(DOTENV_PATH, override=True): načte proměnné z .env a přepíše stávající v os.environ.
 
 2. Třída Config
-   - Základní parametry pro všechny režimy (development, testing, production).
+   - Základní parametry pro všechny režimy.
    - SECRET_KEY: pro Flask session a CSRF.
    - JWT_SECRET_KEY: pro podepisování/verifikaci JWT tokenů.
    - SQLALCHEMY_TRACK_MODIFICATIONS = False: vypne zbytečné sledování ORM změn.
@@ -147,11 +145,16 @@ Principy a důležité body
    - API_TITLE, API_VERSION: metadata API.
    - OPENAPI_URL_PREFIX, OPENAPI_SWAGGER_UI_PATH, OPENAPI_SWAGGER_UI_URL: cesty a zdroj pro UI.
    - OPENAPI_COMPONENTS + OPENAPI_SECURITY: definice BearerAuth v dokumentaci.
-   - persistAuthorization: token v UI zůstane uložen.
+   - OPENAPI_SWAGGER_UI_CONFIG["persistAuthorization"]: tlačítko Authorize si pamatuje token.
+   - API_SPEC_OPTIONS: další konfigurace pro flask-smorest, aby Swagger UI automaticky vědělo o BearerAuth.
 
-4. Konkrétní režimy dědí z Config:
+4. **DEV_JWT_TOKEN** v `.env`
+   - Pokud máte v `.env` klíč `DEV_JWT_TOKEN`, Swagger UI po kliknutí na Authorize nabídne vložit:
+     `Bearer <DEV_JWT_TOKEN>`
+   - Nemusíte restartovat server po změně tokenu, UI jej použije okamžitě.
+
+5. Konkrétní režimy dědí z Config:
    - DevelopmentConfig: DEBUG=True, SQLALCHEMY_ECHO=True, URI z env DATABASE_URL (fallback na lokální).
    - TestingConfig: TESTING=True, WTF_CSRF_ENABLED=False, in-memory SQLite pro izolované testy.
    - ProductionConfig: DEBUG=False, TESTING=False, vyžaduje env DATABASE_URL (KeyError při chybě).
-
 """
