@@ -89,3 +89,38 @@ def create_app(config_name=None, config_override=None):
         return "Hello, World from Flask!"
 
     return app
+
+"""
+Principy a důležité body pro create_app()
+-----------------------------------------
+1. Application Factory:
+   - Funkce create_app() vrací novou instanci Flask aplikace podle zvoleného režimu
+     (development/testing/production).
+
+2. Výběr konfigurace:
+   - Nejprve se podíváme, zda byl předán parametr config_override (pro testy).
+   - Pokud ne, použijeme jméno config_name, případně env FLASK_CONFIG, nebo "default".
+
+3. Inicializace rozšíření:
+   - db.init_app(app) + migrate.init_app(app, db): SQLAlchemy + Alembic migrace.
+   - JWTManager(app): zapne podporu JWT.
+
+4. Dev-mode JWT injector:
+   - Pokud běžíme ve vývoji a máme v .env proměnnou DEV_JWT_TOKEN,
+     zkontrolujeme každý request před zpracováním:
+       * pokud chybí hlavička Authorization, vložíme
+         request.environ["HTTP_AUTHORIZATION"] = f"Bearer {DEV_JWT_TOKEN}"
+   - Umožní testovat chráněné endpointy (Swagger UI) bez manuálního
+     zadávání tokenu.
+
+5. Swagger/OpenAPI:
+   - Api(app) vytvoří Swagger UI pod /api/docs/swagger.
+   - Registrujeme api_bp i auth_bp blueprinty.
+
+6. Error handlery:
+   - UnprocessableEntity → 422 s podrobnými chybami validace.
+   - NotFound → 404 s JSON { status, code, message }.
+
+7. Testovací trasa:
+   - /hello pro ověření, že aplikace běží.
+"""
