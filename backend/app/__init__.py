@@ -1,11 +1,13 @@
+# app/__init__.py
+
 import os
 import warnings
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_smorest import Api
 from flask_jwt_extended import JWTManager
 from werkzeug.exceptions import NotFound, UnprocessableEntity
 
-# potlačíme jen varování z apispecu o duplicitních schématech
+# potlačíme jen varování o duplicitních schématech
 warnings.filterwarnings(
     "ignore",
     "Multiple schemas resolved to the name",
@@ -16,7 +18,7 @@ warnings.filterwarnings(
 from .config import config_by_name
 from .db import db, migrate
 
-# načteme modely, aby Alembic a apispec viděly metadata
+# načteme modely, aby je Alembic/apí-spec viděl
 from .models import (
     Zakaznik, VernostniUcet, Rezervace, Stul, Salonek,
     PodnikovaAkce, Objednavka, PolozkaObjednavky, Platba,
@@ -29,24 +31,34 @@ def create_app(config_name=None, config_override=None):
         config_name = os.getenv("FLASK_CONFIG", "default")
 
     app = Flask(__name__)
-
-    # aby flask.json neposílal \uXXXX, ale přímo UTF-8 znaky
     app.json.ensure_ascii = False
 
+    # načtení configu (development/testing/production)
     if config_override:
         app.config.from_object(config_override)
     else:
         app.config.from_object(config_by_name[config_name])
-
     app.config.setdefault("JSON_AS_ASCII", False)
 
+    # init DB + migration
     db.init_app(app)
     migrate.init_app(app, db)
 
-    # --- inicializace JWT ---
-    jwt = JWTManager(app)
+    # init JWT
+    JWTManager(app)
 
-    # init API a registrace blueprintů
+    # ─── jediné přidání: v dev módu injektujeme JWT ze .env do všech requestů ───
+    if config_name == "development":
+        dev_token = os.getenv("DEV_JWT_TOKEN")
+        if dev_token:
+            @app.before_request
+            def _inject_dev_token():
+                # pokud klient neposlal vlastní Authorization, doplníme ho
+                if not request.headers.get("Authorization"):
+                    request.environ["HTTP_AUTHORIZATION"] = f"Bearer {dev_token}"
+    # ────────────────────────────────────────────────────────────────────────────
+
+    # init API / Swagger UI (bez dalších změn)
     api = Api(app)
     from .api import api_bp
     from .api.auth import auth_bp

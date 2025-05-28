@@ -264,13 +264,19 @@ class HodnoceniCreateSchema(Schema):
 class PolozkaMenuSchema(Schema):
     id_menu_polozka = fields.Int(dump_only=True)
     nazev           = fields.Str()
-    popis           = fields.Str()
+    popis           = fields.Str(                           # místo null vrátí ""
+                       dump_default="",
+                       allow_none=False
+                   )
     cena            = fields.Decimal(as_string=True)
     alergeny        = fields.Nested("AlergenSchema", many=True, dump_only=True)
 
 class PolozkaMenuCreateSchema(Schema):
     nazev = fields.Str(required=True)
-    popis = fields.Str()
+    popis = fields.Str(                                        # když vynecháte, použije ""
+                       load_default="",
+                       allow_none=False
+                   )
     cena  = fields.Decimal(as_string=True, required=True)
 
 

@@ -1,130 +1,136 @@
-# Backend Aplikace (Flask & Flask-Smorest)
+README – Backend pro Restauraci (Flask & Flask Smorest)
+Toto README je určeno všem vývojářům, kteří budou pracovat na backendové části REST API pro restauraci. Najdete zde popis struktury, klíčových souborů, konfigurace, způsob spuštění, migrací, testování i podrobnou analýzu kódu po jednotlivých modulech.
 
-Tento adresář obsahuje kód pro backendovou část vašeho informačního systému. Je postavena na Pythonu s využitím mikroframeworku Flask a rozšíření Flask-Smorest pro snadnou tvorbu REST API. Backend zodpovídá za zpracování dat, komunikaci s databází a poskytování API pro frontendovou část.
+________________________________________
 
-## Vývojové Prostředí (Docker & Dev Containers)
+1. Účel projektu
+Backend poskytuje REST API pro správu zákazníků, rezervací, objednávek, menu, hodnocení a notifikací. Je postaven na:
+•	Python 3.13 + Flask 3.1
+•	Flask Smorest pro OpenAPI/Swagger generování a validaci dat (Marshmallow)
+•	SQLAlchemy 2.x + Alembic pro ORM a migrace
+•	Flask JWT Extended pro autentizaci pomocí JWT
+•	pytest pro automatizované testy
 
-Celý projekt (backend, frontend, databáze) je navržen pro běh v Docker kontejnerech, které zajišťují konzistentní prostředí nezávislé na vašem lokálním nastavení. Konfigurace je definována v souboru `docker-compose.yml` v kořenovém adresáři projektu.
+________________________________________
 
-**Dev Containers (VS Code):** Pokud používáte Visual Studio Code, můžete využít rozšíření "Dev Containers". To vám umožní otevřít tento projekt přímo *uvnitř* běžícího Docker kontejneru.
-    * **Výhody:** Máte plně nakonfigurované vývojové prostředí (správná verze Pythonu, nainstalované závislosti, přístup k běžícím službám) přímo ve VS Code. Příkazy (jako `alembic`, `pytest`) spouštíte v integrovaném terminálu VS Code, jako byste je spouštěli přímo v kontejneru (bez nutnosti `docker-compose exec`).
-    * **Jak použít:** Pokud je v projektu přítomen adresář `.devcontainer` s konfigurací, VS Code vám při otevření projektu pravděpodobně nabídne možnost "Reopen in Container". Pokud ne, můžete použít příkazovou paletu (Ctrl+Shift+P nebo Cmd+Shift+P) a vyhledat "Dev Containers: Reopen in Container" nebo "Dev Containers: Open Folder in Container...".
-
-## Použité Technologie
-
-* **Flask:** Lehký a flexibilní Python webový framework, který tvoří základ naší aplikace.
-* **Flask-Smorest:** Rozšíření pro Flask, které zjednodušuje tvorbu REST API. Automaticky generuje interaktivní dokumentaci (Swagger UI/OpenAPI) a stará se o validaci vstupních dat a serializaci výstupních dat pomocí Marshmallow.
-* **SQLAlchemy:** Knihovna pro práci s databázemi (ORM - Object-Relational Mapper). Umožňuje definovat databázové tabulky jako Python třídy (modely) a pracovat s databází pomocí Python objektů místo psaní SQL dotazů ručně.
-* **Alembic:** Nástroj pro správu databázových migrací. Umožňuje sledovat změny ve vašich SQLAlchemy modelech a generovat skripty pro aktualizaci schématu databáze.
-* **Marshmallow:** Knihovna pro serializaci (převod Python objektů na JSON) a deserializaci/validaci (převod JSON na Python objekty a jejich kontrola). Flask-Smorest ji intenzivně využívá.
-* **Psycopg:** Adaptér pro připojení Pythonu k databázi PostgreSQL. (Pokud používáte PostgreSQL).
-* **python-dotenv:** Knihovna pro načítání konfiguračních proměnných ze souboru `.env`.
-* **pytest:** Framework pro psaní a spouštění automatizovaných testů.
-
-## Struktura Adresáře `backend/`
-
-```
+2. Struktura projektu
 backend/
-│
-├── app/            # Hlavní balíček obsahující logiku aplikace
-│   ├── api/        # Modul pro definici API endpointů
-│   │   ├── __init__.py # Inicializace API Blueprintu (Flask-Smorest)
-│   │   └── routes.py   # Definice konkrétních API cest a logiky (Resources)
-│   │
-│   ├── __init__.py # Inicializace Flask aplikace (Application Factory pattern - funkce create_app)
-│   ├── config.py   # Konfigurační třídy (Development, Testing, Production) - načítá z .env
-│   ├── db.py       # Inicializace SQLAlchemy a Flask-Migrate
-│   ├── models.py   # Definice databázových modelů (SQLAlchemy třídy)
-│   └── schemas.py  # Definice schémat (Marshmallow třídy) pro validaci a serializaci dat
-│
-├── migrations/     # Adresář spravovaný nástrojem Alembic
-│   ├── versions/   # Jednotlivé migrační skripty generované Alembicem
-│   ├── alembic.ini # Konfigurační soubor pro Alembic
-│   └── env.py      # Skript pro běhové prostředí Alembicu (konfigurace připojení k DB atd.)
-│
-├── tests/          # Adresář s automatizovanými testy
-│   └── test_api.py # Příklad testů pro API endpointy (používá pytest)
-│
-├── Dockerfile      # Instrukce pro sestavení Docker image pro backend
-├── requirements.txt # Seznam Python závislostí pro backend
-└── run.py          # Jednoduchý skript pro spuštění Flask aplikace (používá se v Dockeru)
-```
+├── app/
+│   ├── api/
+│   │   ├── __init__.py    # Blueprint definice (api_bp)
+│   │   ├── routes.py      # Všechny CRUD endpointy + register_crud helper
+│   │   └── auth.py        # Login a /me endpointy (JWT)
+│   ├── __init__.py        # create_app() Factory
+│   ├── config.py          # Konfigurace (development/testing/production)
+│   ├── db.py              # SQLAlchemy + Flask Migrate init
+│   ├── models.py          # Definice ORM modelů (db.Model)
+│   └── schemas.py         # Marshmallow schémata (validace & serializace)
+├── migrations/            # Alembic migrace
+├── tests/                 # Pytest testy pro API endpointy
+├── Dockerfile             # Docker image pro backend
+├── run.py                 # CLI příkazy (seed-db, shell) + spuštění aplikace
+└── requirements.txt       # Python závislosti
 
-## Klíčové Soubory a Koncepty
+________________________________________
 
-* **`app/__init__.py` (Application Factory):**
-    * Obsahuje funkci `create_app()`, která sestavuje a konfiguruje Flask aplikaci.
-    * Tento vzor umožňuje vytvářet více instancí aplikace s různými konfiguracemi (např. pro vývoj, testování, produkci).
-    * Inicializuje rozšíření jako SQLAlchemy (`db.init_app(app)`) a Flask-Smorest (`Api(app)`).
-    * Registruje Blueprints (např. `api_v1_bp`).
-* **`app/config.py`:**
-    * Definuje různé konfigurační třídy (`DevelopmentConfig`, `TestingConfig`, `ProductionConfig`).
-    * Načítá citlivé údaje a nastavení z proměnných prostředí (definovaných v `.env` souboru v kořenovém adresáři projektu).
-    * Obsahuje nastavení jako `SECRET_KEY`, `SQLALCHEMY_DATABASE_URI`, `DEBUG` atd.
-* **`app/db.py`:**
-    * Vytváří instance rozšíření SQLAlchemy (`db = SQLAlchemy()`) a Flask-Migrate (`migrate = Migrate()`). Tyto instance jsou později spojeny s konkrétní Flask aplikací uvnitř `create_app`.
-* **`app/models.py`:**
-    * Zde definujete strukturu vaší databáze pomocí SQLAlchemy modelů.
-    * Každá třída odvozená od `db.Model` reprezentuje jednu databázovou tabulku.
-    * Atributy třídy definované pomocí `db.Column` odpovídají sloupcům v tabulce.
-    * Můžete zde definovat i vztahy mezi tabulkami (`db.relationship`).
-* **`app/schemas.py`:**
-    * Obsahuje definice Marshmallow schémat.
-    * Schémata definují, jaká data očekáváte na vstupu API (`load_only` pole, validace) a jaká data budete posílat na výstupu (`dump_only` pole).
-    * Flask-Smorest používá tato schémata v dekorátorech `@api.arguments()` a `@api.response()`.
-* **`app/api/` (Blueprint & Routes):**
-    * `__init__.py`: Vytváří instanci `Blueprint` z Flask-Smorest. Blueprinty umožňují modulárně organizovat routy a pohledy.
-    * `routes.py`: Definuje konkrétní API endpointy pomocí tříd odvozených od `MethodView` a dekorátorů z Flask-Smorest (`@blueprint.route()`, `@blueprint.response()`, `@blueprint.arguments()`). Zde se nachází logika pro zpracování HTTP požadavků (GET, POST, PUT, DELETE).
-* **`migrations/` (Alembic):**
-    * Tento adresář je spravován nástrojem Alembic.
-    * Když změníte své modely v `app/models.py`, vygenerujete nový migrační skript pomocí Alembicu.
-    * Tento skript obsahuje instrukce pro úpravu schématu databáze (vytvoření/smazání tabulek, přidání/odebrání sloupců atd.).
-    * Aplikací migrace se změny promítnou do vaší skutečné databáze.
-* **`tests/` (Pytest):**
-    * Obsahuje automatizované testy pro ověření funkčnosti vašeho API a logiky.
-    * Testy typicky vytvářejí testovací instanci aplikace s izolovanou databází (např. SQLite in-memory), posílají simulované HTTP požadavky na API endpointy a ověřují správnost odpovědí a stavu databáze.
+3. Konfigurace a spuštění
+1.	.env – proměnné prostředí (např. DATABASE_URL, SECRET_KEY, JWT_SECRET_KEY,
+FLASK_CONFIG, DEV_JWT_TOKEN). Nikdy nevkládat do Gitu.
+2.	Výběr configu:
+3.	export FLASK_CONFIG=development    # nebo testing/production
+4.	Spuštění aplikace:
+5.	flask run  # nebo python run.py
+6.	Seed databáze (demo data):
+7.	flask seed-db
+8.	Swagger UI (interaktivní dokumentace):
+Otevřete v prohlížeči http://localhost:8000/api/docs/swagger.
 
-## Jak Pracovat s Backendem
+________________________________________
 
-(Předpokládá se, že kontejnery běží - `docker-compose up -d`)
+4. Podsložky a hlavní moduly
+4.1 app/__init__.py (Application Factory)
+•	Funkce create_app(config_name=None, config_override=None):
+o	Načte Config třídu podle FLASK_CONFIG.
+o	Inicializuje Flask, db.init_app(), migrate.init_app(), JWTManager, Api(app).
+o	Registruje Blueprints: api_bp (všechny /api/... endpointy) a auth_bp (/api/auth).
+o	Ve development injektuje DEV_JWT_TOKEN před každým requestem, pokud chybí Authorization header.
+o	Definuje error handlery pro 404 a 422.
+4.2 app/config.py
+•	Základní třída Config + dědičné DevelopmentConfig, TestingConfig, ProductionConfig.
+•	Nastavuje SQLALCHEMY_DATABASE_URI, JWT_SECRET_KEY, OpenAPI metadata (SWAGGER UI).
+4.3 app/db.py
+•	db = SQLAlchemy(), migrate = Migrate() – bez vazby na konkrétní aplikaci.
+4.4 app/models.py
+Definice ORM modelů:
+•	Zakaznik: jméno, e mail, telefon, zahashované heslo (_password), vztahy na Rezervace, Objednavky, Hodnoceni, jeden ku jednomu na VernostniUcet.
+•	VernostniUcet: body, datum založení, FK na Zakaznik (cascade delete).
+•	Rezervace: datum/čas, počet osob, FK na Zakaznik, Stul nebo Salonek (CheckConstraint – musí být buď stůl, nebo salonek), vztah na Notifikace.
+•	Objednavka, PolozkaObjednavky, Platba, Hodnoceni, Notifikace – vazby mezi tabulkami.
+•	PolozkaMenu, Alergen, PolozkaMenuAlergen – reprezentace menu a alergenů.
+•	JidelniPlan, PolozkaJidelnihoPlanu – denní plány s položkami.
+4.5 app/schemas.py
+•	Marshmallow schémata pro validaci a serializaci.
+•	Summary schémata (např. RezervaceSummarySchema) pro vnořené seznamy.
+•	Create schémata (load_only) a Schema (dump_only) pro response.
+•	Custom @post_dump a @validates_schema pro kontrolu a úpravu dat.
 
-**Důležitá poznámka pro uživatele Dev Containers (VS Code):** Pokud pracujete uvnitř Dev Containeru, všechny níže uvedené příkazy (`alembic`, `pytest`) spouštějte přímo v **integrovaném terminálu VS Code**. Není potřeba používat `docker-compose exec backend ...`.
+________________________________________
 
-1.  **Úprava Modelů (`app/models.py`):**
-    * Přidejte nebo upravte třídy modelů podle potřeb vašeho IS.
-2.  **Generování Migrace:**
-    * Po změně modelů otevřete terminál (lokální nebo v Dev Containeru) a spusťte:
-        ```bash
-        alembic revision --autogenerate -m "Stručný popis změny modelu"
-        ```
-    * Tím se v adresáři `migrations/versions/` vytvoří nový Python soubor s migračním skriptem. Zkontrolujte jeho obsah.
-3.  **Aplikace Migrace:**
-    * Aplikujte vygenerovanou migraci na databázi:
-        ```bash
-        alembic upgrade head
-        ```
-4.  **Definice Schémat (`app/schemas.py`):**
-    * Vytvořte nebo upravte Marshmallow schémata odpovídající vašim modelům a tomu, jaká data chcete přijímat a odesílat přes API.
-5.  **Implementace API Endpointů (`app/api/routes.py`):**
-    * Vytvořte nové `MethodView` třídy nebo upravte stávající.
-    * Použijte dekorátory `@api_v1_bp.route()`, `@api_v1_bp.arguments(YourSchema)` a `@api_v1_bp.response(YourSchema)` pro definování cest, validaci vstupů a formátování výstupů.
-    * Implementujte metody `get()`, `post()`, `put()`, `delete()` s vaší business logikou (interakce s databází pomocí SQLAlchemy - `db.session`).
-6.  **Psaní Testů (`tests/`):**
-    * Pro každý nový endpoint nebo logiku přidejte odpovídající testy do `tests/test_api.py` (nebo vytvořte nové testovací soubory).
-    * Použijte `test_client` (poskytovaný fixturem v `test_api.py`) k posílání požadavků a `assert` ke kontrole výsledků.
-7.  **Spouštění Testů:**
-    * Spusťte všechny testy:
-        ```bash
-        python -m pytest tests/ -v
-        ```
-8.  **Prohlížení API Dokumentace:**
-    * Otevřete v prohlížeči adresu Swagger UI (obvykle `http://localhost:5000/api/docs/swagger` nebo podobnou - viz `OPENAPI_SWAGGER_UI_PATH` v `app/config.py`). Zde uvidíte automaticky generovanou dokumentaci vašich endpointů a můžete je přímo testovat.
+5. API Endpointy
+5.1 app/api/__init__.py
+•	Vytvoří api_bp = Blueprint("api", __name__, url_prefix="/api").
+•	Importuje routes.py, auth.py registruje později v factory.
+5.2 app/api/routes.py
+1.	ZakaznikList a ZakaznikItem:
+o	CRUD pro /api/zakaznik[/:id].
+o	Všechny operace chráněné @jwt_required() (GET, POST, PUT, DELETE).
+o	Při POST se automaticky vytvoří i VernostniUcet.
+o	Error handling: IntegrityError → 409, not found → 404.
+2.	register_crud() helper:
+o	Generuje CRUD endpointy pro ostatní modely (ucet, stul, salonek, akce, objednavka, atd.) s jedním řádkem.
+o	Veřejné – bez ochrany JWT.
+5.3 app/api/auth.py
+•	LoginResource (POST /api/auth/login):
+o	Načte Email + Password, ověří pomocí Zakaznik.check_password(), vytvoří access token (identity = str(id)).
+•	MeResource (GET /api/auth/me):
+o	Vrací základní info o přihlášeném zákazníkovi (id, email, jmeno, prijmeni).
+o	Chráněno @jwt_required().
 
-## Důležité Poznámky
+________________________________________
 
-* **Konfigurace:** Všechna citlivá data (hesla k DB, `SECRET_KEY`) by měla být spravována pomocí souboru `.env` v kořenovém adresáři projektu a **nikdy by neměla být součástí Gitu**. Použijte `.env.example` jako šablonu.
-* **Databázové Migrace:** Vždy generujte a aplikujte migrace po změně modelů. Migrační soubory (`migrations/versions/*.py`) **verzujte v Gitu**, aby měli všichni členové týmu stejnou strukturu databáze.
-* **Hesla:** **Nikdy neukládejte hesla v čistém textu!** V modelu `User` implementujte metody pro hashování (při ukládání/aktualizaci) a ověřování (při přihlašování) hesel pomocí knihoven jako `Werkzeug.security` nebo `passlib`. Schémata by měla používat `load_only=True` pro pole s heslem.
-* **Chybové Stavy:** V API endpointech používejte `abort(http_status_code, message="...")` z `flask_smorest` pro vracení standardizovaných chybových odpovědí (např. 404 Not Found, 400 Bad Request, 409 Conflict).
+6. Spuštění & Migrace
+1.	Alembic migrace:
+2.	alembic revision --autogenerate -m "Popis změny"
+3.	alembic upgrade head
+4.	Demo data:
+5.	flask seed-db
+6.	Testy:
+7.	pytest -v
 
-Tento README poskytuje základní přehled. Pro hlubší pochopení jednotlivých technologií doporučuji prostudovat jejich oficiální dokumentaci.
+________________________________________
+
+7. Docker & Dev Containers
+•	Dockerfile (varianty s/bez jq): instaluje Python závislosti, nastavuje FLASK_APP, FLASK_DEBUG.
+•	Doporučené otevřít ve VS Code Dev Container pro konzistentní prostředí.
+
+________________________________________
+
+8. Analýza kódu (průvodce soubory)
+Níže najdete stručný popis všech hlavních souborů a jejich role:
+Soubor	Popis
+app/__init__.py	Application Factory – sestavení Flask instance, registrace rozšíření a Blueprintů
+app/config.py	Nastavení prostředí (development/testing/production), načítání .env
+app/db.py	Inicializace SQLAlchemy (db) a Flask-Migrate (migrate)
+app/models.py	Definice všech tabulek jako SQLAlchemy modelů + vztahy a validace
+app/schemas.py	Marshmallow schémata: validace requestů, serializace response
+app/api/__init__.py	Vytvoření a export Blueprintu api_bp
+app/api/routes.py	CRUD endpointy: vlastní zákazníci + generický register_crud pro ostatní entity
+app/api/auth.py	Autentizace: login (/login) a informace o uživateli (/me)
+run.py	CLI příkazy (seed-db), shell context, spuštění aplikace
+migrations/	Automigrované skripty pro změny v DB
+tests/	Pytest testy zahrnující CRUD operace pro /api/zakaznik
+Dockerfile	Definice Docker image pro backend, nastavení prostředí
+requirements.txt	Přesný seznam Python balíčků s verzemi
+
+________________________________________
+
