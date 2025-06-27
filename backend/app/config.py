@@ -3,12 +3,13 @@
 # modul pro práci s OS a proměnnými prostředí
 import os
 from dotenv import load_dotenv                # funkce pro načtení .env souboru
+from datetime import timedelta                # přidáno pro expiraci tokenů
 
-# ── Sestavení cesty k .env ────────────────────────────────────────────────────
+# ── Sestavení cesty k .env ───────────────────────────────────────────────────
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DOTENV_PATH = os.path.join(BASE_DIR, "..", ".env")
 
-# ── Načteme proměnné z .env do os.environ (všechny proměnné), přepišeme i stávající (override=True) ──
+# ── Načteme proměnné z .env do os.environ (všechny proměnné), přepišeme i stávající ──
 load_dotenv(DOTENV_PATH, override=True)
 
 
@@ -44,65 +45,61 @@ class Config:
     OPENAPI_VERSION = "3.0.2"
     OPENAPI_URL_PREFIX = "/api/docs"
     OPENAPI_SWAGGER_UI_PATH = "/swagger"
-    OPENAPI_SWAGGER_UI_URL = (
-        "https://cdn.jsdelivr.net/npm/swagger-ui-dist/"
-    )
+    OPENAPI_SWAGGER_UI_URL = "https://cdn.jsdelivr.net/npm/swagger-ui-dist/"
 
     # ── Definice zabezpečení v dokumentaci ───────────────────────────────
+    # změna na apiKey, aby Swagger UI přijalo celý řetězec „Bearer <token>“
     OPENAPI_COMPONENTS = {
         "securitySchemes": {
             "bearerAuth": {
-                "type": "http",
-                "scheme": "bearer",
-                "bearerFormat": "JWT",
-                "description": (
-                    "Vlož JWT ve tvaru "
-                    "`Bearer <váš_token>`"
-                )
+                "type":        "apiKey",
+                "in":          "header",
+                "name":        "Authorization",
+                "description": "Vlož celý řetězec `Bearer <váš_token>`"
             }
         }
     }
-    # vyžadovat Bearer JWT na všech endpointů
     OPENAPI_SECURITY = [{"bearerAuth": []}]
-
-    # persistAuthorization = True → tlačítko Authorize si pamatuje token
-    OPENAPI_SWAGGER_UI_CONFIG = {
-        "persistAuthorization": True
-    }
-
-    # ── Specifikujeme pro flask-smorest, aby Swagger UI vědělo o BearerAuth ──
+    OPENAPI_SWAGGER_UI_CONFIG = {"persistAuthorization": True}
     API_SPEC_OPTIONS = {
         "security": [{"bearerAuth": []}],
-        "components": {
-            "securitySchemes": {
-                "bearerAuth": {
-                    "type": "http",
-                    "scheme": "bearer",
-                    "bearerFormat": "JWT",
-                    "description": "Vlož JWT ve tvaru `Bearer <váš_token>`"
-                }
-            }
-        }
+        "components": OPENAPI_COMPONENTS
     }
+
+    # ── EXPIRACE JWT TOKENŮ ČTENÁ Z .ENV ───────────────────────────────
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(
+        minutes=int(os.environ.get("JWT_ACCESS_TOKEN_EXPIRES_MINUTES", 15))
+    )
+    JWT_REFRESH_TOKEN_EXPIRES = timedelta(
+        days=int(os.environ.get("JWT_REFRESH_TOKEN_EXPIRES_DAYS", 30))
+    )
 
 
 class DevelopmentConfig(Config):
     """Nastavení pro vývojové prostředí."""
 
-    DEBUG = True                             # zapne auto-reload a detailní chyby
-    SQLALCHEMY_ECHO = True                   # vypisovat raw SQL pro ladění
+    DEBUG = True   # zapne auto-reload a detailní chyby
+    SQLALCHEMY_ECHO = True   # vypisovat raw SQL pro ladění
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         "DATABASE_URL",
         "postgresql+psycopg://user:heslo@localhost/dev_db"
     )
     #   URI pro vývojovou DB
 
+    # — místo nekonečné platnosti nyní expirace z .env —
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(
+        minutes=int(os.environ.get("JWT_ACCESS_TOKEN_EXPIRES_MINUTES", 15))
+    )
+    JWT_REFRESH_TOKEN_EXPIRES = timedelta(
+        days=int(os.environ.get("JWT_REFRESH_TOKEN_EXPIRES_DAYS", 30))
+    )
+
 
 class TestingConfig(Config):
     """Nastavení pro testovací běh."""
 
-    TESTING = True                           # zapne testovací režim Flaska
-    WTF_CSRF_ENABLED = False                 # vypne CSRF ochranu v testech
+    TESTING = True    # zapne testovací režim Flaska
+    WTF_CSRF_ENABLED = False   # vypne CSRF ochranu v testech
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         "TEST_DATABASE_URL",
         "sqlite:///:memory:"
@@ -118,6 +115,9 @@ class ProductionConfig(Config):
     SQLALCHEMY_DATABASE_URI = os.environ["DATABASE_URL"]
     #   produkční DB URI (musí být definováno v .env)
 
+    # — expirace tokenů i v produkci (bere se z Config) —
+    # (není třeba znovu deklarovat, ale můžete přepsat analogicky výše)
+
 
 # ── Mapa názvů režimů na třídy konfigurace ──────────────────────────────────
 config_by_name = {
@@ -126,35 +126,3 @@ config_by_name = {
     "production":  ProductionConfig,
     "default":     DevelopmentConfig
 }
-
-
-"""
-Principy a důležité body
-------------------------
-1. .env načítání
-   - load_dotenv(DOTENV_PATH, override=True): načte proměnné z .env a přepíše stávající v os.environ.
-
-2. Třída Config
-   - Základní parametry pro všechny režimy.
-   - SECRET_KEY: pro Flask session a CSRF.
-   - JWT_SECRET_KEY: pro podepisování/verifikaci JWT tokenů.
-   - SQLALCHEMY_TRACK_MODIFICATIONS = False: vypne zbytečné sledování ORM změn.
-   - SQLALCHEMY_ECHO: logování SQL dotazů, v produkci False, ve vývoji True.
-
-3. OpenAPI/Swagger nastavení
-   - API_TITLE, API_VERSION: metadata API.
-   - OPENAPI_URL_PREFIX, OPENAPI_SWAGGER_UI_PATH, OPENAPI_SWAGGER_UI_URL: cesty a zdroj pro UI.
-   - OPENAPI_COMPONENTS + OPENAPI_SECURITY: definice BearerAuth v dokumentaci.
-   - OPENAPI_SWAGGER_UI_CONFIG["persistAuthorization"]: tlačítko Authorize si pamatuje token.
-   - API_SPEC_OPTIONS: další konfigurace pro flask-smorest, aby Swagger UI automaticky vědělo o BearerAuth.
-
-4. **DEV_JWT_TOKEN** v `.env`
-   - Pokud máte v `.env` klíč `DEV_JWT_TOKEN`, Swagger UI po kliknutí na Authorize nabídne vložit:
-     `Bearer <DEV_JWT_TOKEN>`
-   - Nemusíte restartovat server po změně tokenu, UI jej použije okamžitě.
-
-5. Konkrétní režimy dědí z Config:
-   - DevelopmentConfig: DEBUG=True, SQLALCHEMY_ECHO=True, URI z env DATABASE_URL (fallback na lokální).
-   - TestingConfig: TESTING=True, WTF_CSRF_ENABLED=False, in-memory SQLite pro izolované testy.
-   - ProductionConfig: DEBUG=False, TESTING=False, vyžaduje env DATABASE_URL (KeyError při chybě).
-"""

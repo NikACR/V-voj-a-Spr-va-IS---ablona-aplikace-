@@ -4,7 +4,7 @@ import os
 import warnings
 from flask import Flask, jsonify, request
 from flask_smorest import Api
-from flask_jwt_extended import JWTManager
+from flask_jwt_extended import JWTManager, create_access_token
 from werkzeug.exceptions import NotFound, UnprocessableEntity
 
 # potlačíme jen varování o duplicitních schématech
@@ -18,12 +18,13 @@ warnings.filterwarnings(
 from .config import config_by_name
 from .db import db, migrate
 
-# načteme modely, aby je Alembic/apí-spec viděl
+# načteme modely, aby je Alembic/apispec viděl
 from .models import (
     Zakaznik, VernostniUcet, Rezervace, Stul, Salonek,
     PodnikovaAkce, Objednavka, PolozkaObjednavky, Platba,
     Hodnoceni, PolozkaMenu, PolozkaMenuAlergen,
-    JidelniPlan, PolozkaJidelnihoPlanu, Alergen, Notifikace
+    JidelniPlan, PolozkaJidelnihoPlanu, Alergen, Notifikace,
+    Role, TokenBlacklist
 )
 
 def create_app(config_name=None, config_override=None):
@@ -44,21 +45,28 @@ def create_app(config_name=None, config_override=None):
     db.init_app(app)
     migrate.init_app(app, db)
 
-    # init JWT
-    JWTManager(app)
+    # init JWT + blacklist callback
+    jwt = JWTManager(app)
+    @jwt.token_in_blocklist_loader
+    def check_if_token_revoked(jwt_header, jwt_payload):
+        jti = jwt_payload["jti"]
+        return db.session.query(TokenBlacklist).filter_by(jti=jti).first() is not None
 
-    # ─── jediné přidání: v dev módu injektujeme JWT ze .env do všech requestů ───
+    # ─── dev‐mode JWT injector ───────────────────────────────────────────────
+    # pokud běžíme ve vývoji, automaticky vytvoříme token pro DEV_USER_EMAIL
     if config_name == "development":
-        dev_token = os.getenv("DEV_JWT_TOKEN")
-        if dev_token:
-            @app.before_request
-            def _inject_dev_token():
-                # pokud klient neposlal vlastní Authorization, doplníme ho
-                if not request.headers.get("Authorization"):
-                    request.environ["HTTP_AUTHORIZATION"] = f"Bearer {dev_token}"
+        dev_email = os.getenv("DEV_USER_EMAIL")
+        dev_password = os.getenv("DEV_USER_PASSWORD")
+        @app.before_request
+        def _inject_dev_token():
+            if not request.headers.get("Authorization") and dev_email and dev_password:
+                user = db.session.query(Zakaznik).filter_by(email=dev_email).first()
+                if user and user.check_password(dev_password):
+                    token = create_access_token(identity=str(user.id_zakaznika))
+                    request.environ["HTTP_AUTHORIZATION"] = f"Bearer {token}"
     # ────────────────────────────────────────────────────────────────────────────
 
-    # init API / Swagger UI (bez dalších změn)
+    # init API / Swagger UI
     api = Api(app)
     from .api import api_bp
     from .api.auth import auth_bp
@@ -89,38 +97,3 @@ def create_app(config_name=None, config_override=None):
         return "Hello, World from Flask!"
 
     return app
-
-"""
-Principy a důležité body pro create_app()
------------------------------------------
-1. Application Factory:
-   - Funkce create_app() vrací novou instanci Flask aplikace podle zvoleného režimu
-     (development/testing/production).
-
-2. Výběr konfigurace:
-   - Nejprve se podíváme, zda byl předán parametr config_override (pro testy).
-   - Pokud ne, použijeme jméno config_name, případně env FLASK_CONFIG, nebo "default".
-
-3. Inicializace rozšíření:
-   - db.init_app(app) + migrate.init_app(app, db): SQLAlchemy + Alembic migrace.
-   - JWTManager(app): zapne podporu JWT.
-
-4. Dev-mode JWT injector:
-   - Pokud běžíme ve vývoji a máme v .env proměnnou DEV_JWT_TOKEN,
-     zkontrolujeme každý request před zpracováním:
-       * pokud chybí hlavička Authorization, vložíme
-         request.environ["HTTP_AUTHORIZATION"] = f"Bearer {DEV_JWT_TOKEN}"
-   - Umožní testovat chráněné endpointy (Swagger UI) bez manuálního
-     zadávání tokenu.
-
-5. Swagger/OpenAPI:
-   - Api(app) vytvoří Swagger UI pod /api/docs/swagger.
-   - Registrujeme api_bp i auth_bp blueprinty.
-
-6. Error handlery:
-   - UnprocessableEntity → 422 s podrobnými chybami validace.
-   - NotFound → 404 s JSON { status, code, message }.
-
-7. Testovací trasa:
-   - /hello pro ověření, že aplikace běží.
-"""

@@ -1,14 +1,18 @@
 # app/api/auth.py
 
-
-from flask.views import MethodView                      # class-based views
-# Blueprint a abort pro JSON chyby
+from flask.views import MethodView
 from flask_smorest import Blueprint, abort
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from flask_jwt_extended import (
+    create_access_token,
+    create_refresh_token,
+    jwt_required,
+    get_jwt_identity,
+    get_jwt
+)
 
-from ..db import db                                     # SQLAlchemy session
-from ..models import Zakaznik                           # model zákazníka
-from ..schemas import LoginSchema                        # schema pro login vstup
+from ..db import db
+from ..models import Zakaznik, TokenBlacklist
+from ..schemas import LoginSchema
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
@@ -17,63 +21,76 @@ auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 class LoginResource(MethodView):
     """
     POST /api/auth/login
-    - @arguments(LoginSchema): validuje email (str) a password (str, load_only)
-    - Najde Zakaznik podle emailu, pak check_password(raw)
-    - Pokud neplatné, abort(401)
-    - Jinak create_access_token(identity=str(id_zakaznika))
-    - Vrátí JSON { "access_token": token }
+    - @arguments(LoginSchema): validuje email, password
+    - Ověříme uživatele a heslo, abort(401) při chybě
+    - Vytvoříme access i refresh token s rolemi
+    - Vrací { "access_token": ..., "refresh_token": ... }
     """
     @auth_bp.arguments(LoginSchema)
     def post(self, data):
-        # data = ověřený dict {"email": ..., "password": ...}
-        user = db.session.query(Zakaznik).filter_by(
-            email=data["email"]).first()
+        user = db.session.query(Zakaznik).filter_by(email=data["email"]).first()
         if not user or not user.check_password(data["password"]):
             abort(401, message="Neplatné přihlašovací údaje.")
-        # identity vždy string (JWT požaduje str)
-        access_token = create_access_token(identity=str(user.id_zakaznika))
-        return {"access_token": access_token}
+        # načti role uživatele
+        roles = [r.name for r in user.roles]
+        access_token = create_access_token(
+            identity=str(user.id_zakaznika),
+            additional_claims={"roles": roles}
+        )
+        refresh_token = create_refresh_token(identity=str(user.id_zakaznika))
+        return {"access_token": access_token, "refresh_token": refresh_token}
 
 
 @auth_bp.route("/me")
 class MeResource(MethodView):
     """
     GET /api/auth/me
-    - @jwt_required(): ochrana JWT tokenem
-    - get_jwt_identity(): získá identity (string ID zákazníka)
-    - Načte Zakaznik podle ID, pokud neexistuje abort(404)
-    - Vrátí JSON s id, email, jmeno, prijmeni
+    - @jwt_required(): vyžaduje platný access token
+    - Vrací základní informace o přihlášeném uživateli
     """
     @jwt_required()
     @auth_bp.response(200)
     def get(self):
-        user_id = get_jwt_identity()                   # string s id_zakaznika
+        user_id = get_jwt_identity()
         user = db.session.get(Zakaznik, int(user_id))
         if not user:
             abort(404, message="Uživatel nenalezen.")
         return {
-            "id": user.id_zakaznika,
-            "email": user.email,
-            "jmeno": user.jmeno,
+            "id":       user.id_zakaznika,
+            "email":    user.email,
+            "jmeno":    user.jmeno,
             "prijmeni": user.prijmeni
         }
 
 
-"""
-Principy a důležité body
-------------------------
-1. Přihlášení (Login)
-   - POST /api/auth/login
-   - @auth_bp.arguments(LoginSchema): validuje email a password
-   - Ověříme uživatele v DB a zkontrolujeme hash hesla (check_password)
-   - Vytvoříme JWT token pomocí create_access_token(identity)
-   - identity je vždy string (proto str(user.id_zakaznika))
-   - Vrací JSON { "access_token": "<token>" }
+@auth_bp.route("/refresh")
+class RefreshResource(MethodView):
+    """
+    POST /api/auth/refresh
+    - @jwt_required(refresh=True): vyžaduje validní refresh token
+    - Vygeneruje nový access token se stejnými rolemi
+    """
+    @jwt_required(refresh=True)
+    def post(self):
+        user_id = get_jwt_identity()
+        user = db.session.get(Zakaznik, int(user_id))
+        roles = [r.name for r in user.roles]
+        access_token = create_access_token(
+            identity=str(user_id),
+            additional_claims={"roles": roles}
+        )
+        return {"access_token": access_token}, 200
 
-2. Ověření identity (Me)
-   - GET /api/auth/me
-   - @jwt_required(): ochrana JWT tokenem
-   - get_jwt_identity(): vrátí identity (string ID)
-   - Načteme Zakaznik podle ID, vrátíme základní data
-   - Pokud uživatel neexistuje, abort(404)
-"""
+
+@auth_bp.route("/logout")
+class LogoutResource(MethodView):
+    """
+    POST /api/auth/logout
+    - @jwt_required(): přidá aktuální access token do blacklistu
+    """
+    @jwt_required()
+    def post(self):
+        jti = get_jwt()["jti"]
+        db.session.add(TokenBlacklist(jti=jti))
+        db.session.commit()
+        return {"msg": "Token zablokován, jste odhlášen(a)."}, 200

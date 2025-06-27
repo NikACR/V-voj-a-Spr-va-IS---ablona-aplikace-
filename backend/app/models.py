@@ -4,6 +4,7 @@ from .db import db                                    # db = SQLAlchemy instance
 from sqlalchemy import CheckConstraint                 # pro kontrolu podmínek na úrovni DB
 from werkzeug.security import generate_password_hash, check_password_hash  
                                                       # pro hashování a ověřování hesel
+from datetime import datetime                         # pro časové razítko blacklistu
 
 # ──────────────────────────────────────────────────────────────────────────────
 # PARAMETRY:
@@ -12,6 +13,16 @@ from werkzeug.security import generate_password_hash, check_password_hash
 # - back_populates="attr" → propojí vztahy obou tříd, aby byly synchronní
 # - lazy="dynamic" → vztah vrací Query objekt, data se načtou teprve při volání .all(), .filter() apod.
 # ──────────────────────────────────────────────────────────────────────────────
+
+# ——— spojka Zakaznik ↔ Role —————————————————————————————
+user_roles = db.Table(
+    "user_roles",
+    db.Column("zakaznik_id", db.Integer,
+              db.ForeignKey("zakaznik.id_zakaznika"), primary_key=True),
+    db.Column("role_id",     db.Integer,
+              db.ForeignKey("role.id_role"),           primary_key=True),
+)
+
 
 class Zakaznik(db.Model):
     """
@@ -44,6 +55,14 @@ class Zakaznik(db.Model):
     objednavky = db.relationship("Objednavka",   back_populates="zakaznik", lazy="dynamic")
     hodnoceni  = db.relationship("Hodnoceni",    back_populates="zakaznik", lazy="dynamic")
 
+    # many-to-many: uživatel může mít více rolí
+    roles = db.relationship(
+        "Role",
+        secondary=user_roles,
+        backref=db.backref("zakaznici", lazy="dynamic"),
+        lazy="dynamic",
+    )
+
     def __repr__(self):
         return f"<Zakaznik {self.jmeno} {self.prijmeni}>"
 
@@ -55,7 +74,6 @@ class Zakaznik(db.Model):
     @password.setter
     def password(self, raw_password: str):
         # vytvoří hash z raw_password a uloží ho do _password
-        # generate_password_hash používá salt + PBKDF2 (werkzeug.security)
         self._password = generate_password_hash(raw_password)
 
     def check_password(self, raw_password: str) -> bool:
@@ -379,3 +397,33 @@ class Notifikace(db.Model):
 
     def __repr__(self):
         return f"<Notifikace {self.id_notifikace} type={self.typ}>"
+
+
+# ———————————————————————————————————————————————————————————————
+class Role(db.Model):
+    """
+    Role:
+    - id_role: primární klíč
+    - name: unikátní název role (např. "admin", "editor")
+    - description: nepovinný popis role
+    """
+    __tablename__ = "role"
+    id_role     = db.Column(db.Integer, primary_key=True)
+    name        = db.Column(db.String(30), unique=True, nullable=False)
+    description = db.Column(db.String(255), nullable=True)
+
+    def __repr__(self):
+        return f"<Role {self.name}>"
+
+
+class TokenBlacklist(db.Model):
+    """
+    TokenBlacklist:
+    - id: primární klíč
+    - jti: jedinečný identifikátor JWT (token ID)
+    - created_at: čas přidání na blacklist
+    """
+    __tablename__ = "token_blacklist"
+    id         = db.Column(db.Integer,   primary_key=True)
+    jti        = db.Column(db.String(36), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime,   default=datetime.utcnow, nullable=False)
