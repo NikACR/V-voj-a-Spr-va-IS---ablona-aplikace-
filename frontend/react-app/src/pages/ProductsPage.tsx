@@ -1,61 +1,65 @@
 // src/pages/ProductsPage.tsx
-import React, { useState, useEffect } from 'react';
-import { Navigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
 import api from '../utils/api';
-import { useAuth } from '../contexts/AuthContext';
+import SkeletonCard from '../components/SkeletonCard';
 
-type MenuItem = {
-  id_menu_polozka: number;
-  nazev:           string;
-  popis:           string;
-  cena:            number;
-};
+interface Product {
+  id: number;
+  nazev: string;
+  popis: string;
+  cena: number;
+  alergeny: string[];
+}
 
 const ProductsPage: React.FC = () => {
-  const { user, loading: authLoading } = useAuth();
-  const [items,  setItems]   = useState<MenuItem[]>([]);
+  const [items, setItems] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState<string | null>(null);
+  const [error, setError] = useState<string>('');
 
   useEffect(() => {
-    // 1) Počkáme, až skončí načítání auth a uživatel bude definovaný
-    if (authLoading) return;
-    if (!user) return;
-
-    api.get<MenuItem[]>('/menu')
+    setLoading(true);
+    api.get<Product[]>('/menu')
       .then(res => setItems(res.data))
-      .catch(err => {
-        // Pokud backend vrátí JSON.message, ukážeme ho, jinak err.message
-        setError(err.response?.data?.message || err.message);
-      })
+      .catch(() => setError('Nepodařilo se načíst nabídku.'))
       .finally(() => setLoading(false));
-  }, [user, authLoading]);
+  }, []);
 
-  // 2) Zatímco čekáme na auth nebo na data:
-  if (authLoading || loading) {
-    return <p className="text-center mt-8">Načítám nabídku…</p>;
-  }
-  // 3) Pokud není user, přesměruj na login:
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-  // 4) Pokud se fetch nezdařil:
   if (error) {
-    return <p className="text-red-500 text-center mt-8">Chyba: {error}</p>;
+    return <div className="text-red-600 p-4">{error}</div>;
   }
 
   return (
-    <div className="px-6 py-8">
-      <h1 className="text-3xl font-bold mb-6">Naše nabídka</h1>
-      <ul className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {items.map(i => (
-          <li key={i.id_menu_polozka} className="bg-white p-4 rounded shadow">
-            <h2 className="font-semibold text-xl">{i.nazev}</h2>
-            <p className="mt-2">{i.popis}</p>
-            <p className="mt-4 font-bold">{i.cena} Kč</p>
-          </li>
-        ))}
-      </ul>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4">
+      {loading
+        ? Array.from({ length: 6 }).map((_, i) => (
+            <SkeletonCard key={i} height="250px" />
+          ))
+        : items.map(item => (
+            <div key={item.id} className="border rounded-lg p-4 shadow-sm">
+              <h2 className="text-xl font-semibold mb-2">{item.nazev}</h2>
+              <p className="mb-2">{item.popis}</p>
+              <p className="font-bold mb-2">{item.cena} Kč</p>
+              {item.alergeny.length > 0 && (
+                <div className="mb-2">
+                  <span className="font-medium">Alergeny:</span>{' '}
+                  {item.alergeny.map((a, idx) => (
+                    <span
+                      key={idx}
+                      className="inline-block bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded mr-1"
+                    >
+                      {a}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <button
+                onClick={() => {/* tady můžeš otevřít modal rezervace */}}
+                className="mt-2 bg-blue-600 text-white py-1 px-3 rounded"
+              >
+                Rezervovat
+              </button>
+            </div>
+          ))}
     </div>
   );
 };
