@@ -1,104 +1,117 @@
+// src/pages/NewReservationPage.tsx
 import React, { useEffect, useState } from 'react';
 import api from '../utils/api';
-import { useNavigate } from 'react-router-dom';
 
-interface Table {
-  id_stolu: number;
-  cislo: number;
-}
+interface Option { id: number; label: string; }
 
 const NewReservationPage: React.FC = () => {
-  const navigate = useNavigate();
-  const [tables, setTables] = useState<Table[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [dateTime, setDateTime] = useState('');
-  const [persons, setPersons] = useState(1);
-  const [tableId, setTableId] = useState<number | ''>('');
+  const [datumCas, setDatumCas] = useState('');
+  const [pocetOsob, setPocetOsob] = useState(1);
+  const [type, setType] = useState<'stul' | 'salonek' | 'akce'>('stul');
+  const [tables, setTables] = useState<Option[]>([]);
+  const [rooms, setRooms] = useState<Option[]>([]);
+  const [events, setEvents] = useState<Option[]>([]);
+  const [selected, setSelected] = useState<number | null>(null);
 
-  // Načtení stolů
   useEffect(() => {
-    api.get<Table[]>('/stul')
-      .then(res => {
-        setTables(res.data);
-        setError(null);
-      })
-      .catch(() => {
-        setError('Nepodařilo se načíst stoly.');
-      });
+    api.get<{ id_stul: number; cislo: number }[]>('/stul')
+      .then(r => setTables(r.data.map(s => ({ id: s.id_stul, label: `Stůl č. ${s.cislo}` }))));
+    api.get<{ id_salonek: number; nazev: string }[]>('/salonek')
+      .then(r => setRooms(r.data.map(s => ({ id: s.id_salonek, label: s.nazev }))));
+    api.get<{ id_akce: number; nazev: string }[]>('/akce')
+      .then(r => setEvents(r.data.map(a => ({ id: a.id_akce, label: a.nazev }))));
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      await api.post('/rezervace', {
-        datum_cas: dateTime,
-        pocet_osob: persons,
-        stul_id: tableId,
-      });
-      navigate('/reservations');
-    } catch {
-      setError('Chyba při vytváření rezervace.');
-    }
+    const payload: any = { datum_cas: datumCas, pocet_osob: pocetOsob };
+    if (type === 'stul') payload.id_stul = selected;
+    if (type === 'salonek') payload.id_salonek = selected;
+    if (type === 'akce') payload.id_akce = selected;
+    await api.post('/rezervace', payload);
+    // případné přesměrování nebo notifikace
   };
 
+  const options = type === 'stul' ? tables : type === 'salonek' ? rooms : events;
+
   return (
-    <div className="flex justify-center mt-8">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-md bg-white p-6 rounded shadow"
-      >
-        <h1 className="text-xl font-bold mb-4">Nová rezervace</h1>
-
-        {error && <div className="bg-red-100 text-red-700 p-2 mb-4 rounded">{error}</div>}
-
-        <label className="block mb-2">
-          Datum a čas
-          <input
-            type="datetime-local"
-            value={dateTime}
-            onChange={e => setDateTime(e.target.value)}
-            required
-            className="w-full border p-2 rounded"
-          />
+    <form onSubmit={handleSubmit} className="max-w-md mx-auto space-y-4 p-4">
+      <div>
+        <label className="block mb-1">Datum a čas</label>
+        <input
+          type="datetime-local"
+          value={datumCas}
+          onChange={e => setDatumCas(e.target.value)}
+          required
+          className="w-full border rounded px-2 py-1"
+        />
+      </div>
+      <div>
+        <label className="block mb-1">Počet osob</label>
+        <input
+          type="number"
+          min={1}
+          value={pocetOsob}
+          onChange={e => setPocetOsob(+e.target.value)}
+          required
+          className="w-full border rounded px-2 py-1"
+        />
+      </div>
+      <div>
+        <label className="block mb-1">Typ rezervace</label>
+        <div className="flex space-x-4">
+          <label>
+            <input
+              type="radio"
+              name="type"
+              value="stul"
+              checked={type === 'stul'}
+              onChange={() => { setType('stul'); setSelected(null); }}
+            /> Stůl
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="type"
+              value="salonek"
+              checked={type === 'salonek'}
+              onChange={() => { setType('salonek'); setSelected(null); }}
+            /> Salónek
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="type"
+              value="akce"
+              checked={type === 'akce'}
+              onChange={() => { setType('akce'); setSelected(null); }}
+            /> Firemní akce
+          </label>
+        </div>
+      </div>
+      <div>
+        <label className="block mb-1">
+          {type === 'akce' ? 'Vyberte akci' : type === 'salonek' ? 'Vyberte salónek' : 'Vyberte stůl'}
         </label>
-
-        <label className="block mb-2">
-          Počet osob
-          <input
-            type="number"
-            min={1}
-            value={persons}
-            onChange={e => setPersons(Number(e.target.value))}
-            required
-            className="w-full border p-2 rounded"
-          />
-        </label>
-
-        <label className="block mb-4">
-          Vyberte stůl
-          <select
-            value={tableId}
-            onChange={e => setTableId(Number(e.target.value))}
-            required
-            className="w-full border p-2 rounded"
-          >
-            <option value="">-- vyberte --</option>
-            {tables.map(t => (
-              <option key={t.id_stolu} value={t.id_stolu}>
-                {t.cislo}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <button
-          type="submit"
-          className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700"
+        <select
+          value={selected ?? ''}
+          onChange={e => setSelected(+e.target.value)}
+          required
+          className="w-full border rounded px-2 py-1"
         >
-          Rezervovat
-        </button>
-      </form>
-    </div>
+          <option value="" disabled>---</option>
+          {options.map(o => (
+            <option key={o.id} value={o.id}>{o.label}</option>
+          ))}
+        </select>
+      </div>
+      <button
+        type="submit"
+        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+      >
+        Vytvořit rezervaci
+      </button>
+    </form>
   );
 };
 

@@ -1,32 +1,25 @@
-import React from 'react';
-import { Navigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import React from 'react'
+import { Navigate, Outlet } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
 
-interface PrivateRouteProps {
-  children: JSX.Element;
-  allowRoles?: string[];
+interface Props {
+  requireStaff?: boolean
+  requireAdmin?: boolean
 }
 
-const PrivateRoute: React.FC<PrivateRouteProps> = ({ children, allowRoles }) => {
-  const { user, loading } = useAuth();
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        Načítám…
-      </div>
-    );
-  }
+const PrivateRoute: React.FC<Props> = ({ requireStaff = false, requireAdmin = false }) => {
+  const { user } = useAuth()
 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" replace />
   }
-
-  if (allowRoles && !allowRoles.some(r => user.roles?.includes(r))) {
-    return <Navigate to="/" replace />;
+  if (requireStaff && !user.roles.includes('staff')) {
+    return <Navigate to="/" replace />
   }
+  if (requireAdmin && !user.roles.includes('admin')) {
+    return <Navigate to="/" replace />
+  }
+  return <Outlet />
+}
 
-  return children;
-};
-
-export default PrivateRoute;
+export default PrivateRoute

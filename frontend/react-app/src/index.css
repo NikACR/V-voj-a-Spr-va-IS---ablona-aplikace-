@@ -16,6 +16,12 @@ html, body, #root {
   line-height: 1.5;
 }
 
+/* Zvýraznění focusu pro klávesovou navigaci */
+:focus {
+  outline: 2px solid Highlight;
+  outline-offset: 2px;
+}
+
 a {
   font-weight: 500;
   color: #646cff;

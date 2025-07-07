@@ -4,9 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Váš IS Frontend</title>
+    <!-- Tailwind z CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Pokud chcete brát i vaše vlastní reset/style z src/index.css, odkomentujte import dále v main.tsx -->
   </head>
-  <body>
+  <body class="bg-white text-black">
     <div id="root"></div>
+    <!-- <<< Tohle MUSÍTE mít, aby Vite načetl váš React-kód: -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

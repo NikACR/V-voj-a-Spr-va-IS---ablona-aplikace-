@@ -1,5 +1,3 @@
-# app/api/auth.py
-
 from flask.views import MethodView
 from flask_smorest import Blueprint, abort
 from flask_jwt_extended import (
@@ -28,10 +26,10 @@ class LoginResource(MethodView):
     """
     @auth_bp.arguments(LoginSchema)
     def post(self, data):
-        user = db.session.query(Zakaznik).filter_by(email=data["email"]).first()
+        user = db.session.query(Zakaznik).filter_by(
+            email=data["email"]).first()
         if not user or not user.check_password(data["password"]):
             abort(401, message="Neplatné přihlašovací údaje.")
-        # načti role uživatele
         roles = [r.name for r in user.roles]
         access_token = create_access_token(
             identity=str(user.id_zakaznika),
@@ -46,7 +44,7 @@ class MeResource(MethodView):
     """
     GET /api/auth/me
     - @jwt_required(): vyžaduje platný access token
-    - Vrací základní informace o přihlášeném uživateli
+    - Vrací základní informace o přihlášeném uživateli včetně rolí
     """
     @jwt_required()
     @auth_bp.response(200)
@@ -59,7 +57,8 @@ class MeResource(MethodView):
             "id":       user.id_zakaznika,
             "email":    user.email,
             "jmeno":    user.jmeno,
-            "prijmeni": user.prijmeni
+            "prijmeni": user.prijmeni,
+            "roles":    [r.name for r in user.roles]
         }
 
 
@@ -74,6 +73,8 @@ class RefreshResource(MethodView):
     def post(self):
         user_id = get_jwt_identity()
         user = db.session.get(Zakaznik, int(user_id))
+        if not user:
+            abort(404, message="Uživatel nenalezen.")
         roles = [r.name for r in user.roles]
         access_token = create_access_token(
             identity=str(user_id),
@@ -93,4 +94,4 @@ class LogoutResource(MethodView):
         jti = get_jwt()["jti"]
         db.session.add(TokenBlacklist(jti=jti))
         db.session.commit()
-        return {"msg": "Token zablokován, jste odhlášen(a)."}, 200
+        return {"msg": "Token zablokován, jste odhlášeni."}, 200

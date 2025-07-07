@@ -1,84 +1,51 @@
-import React, { useState, FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+// src/pages/LoginPage.tsx
+import React, { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 
 const LoginPage: React.FC = () => {
-  const [email, setEmail] = useState('')
+  const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const { login, loading } = useAuth()
-  const navigate = useNavigate()
+  const [error, setError]       = useState<string | null>(null)
+  const { login, loading }      = useAuth()
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
     try {
       await login(email, password)
-      navigate('/users')
+      // navigate('/') proběhne uvnitř login()
     } catch (err: any) {
-      setError(err.response?.data?.message || err.message)
+      setError(err.response?.data?.message || 'Přihlášení selhalo')
     }
   }
 
   return (
-    <div className="max-w-md mx-auto bg-white p-6 rounded shadow mt-12">
-      <h1 className="text-3xl font-bold mb-6 text-center text-black">
-        Přihlášení
-      </h1>
-
-      {error && (
-        <div className="bg-red-100 text-red-800 p-3 mb-4 rounded">
-          {error}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <input
-          type="email"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          placeholder="Email"
-          required
-          className="
-            w-full border border-gray-300
-            p-3 rounded
-            bg-gray-100 text-black
-            placeholder-gray-500
-            focus:outline-none focus:ring-2 focus:ring-blue-500
-          "
-        />
-
-        <input
-          type="password"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          placeholder="Heslo"
-          required
-          minLength={8}
-          className="
-            w-full border border-gray-300
-            p-3 rounded
-            bg-gray-100 text-black
-            placeholder-gray-500
-            focus:outline-none focus:ring-2 focus:ring-blue-500
-          "
-        />
-
-        <button
-          type="submit"
-          disabled={loading}
-          className={`
-            w-full p-3 rounded
-            ${loading
-              ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
-              : 'bg-white text-black hover:bg-gray-100'}
-            border border-gray-300
-            transition
-          `}
-        >
-          {loading ? 'Načítám…' : 'Přihlásit se'}
-        </button>
-      </form>
+    <div className="min-h-screen flex items-start pt-20 justify-center bg-white">
+      <div className="w-full max-w-md p-6 rounded shadow">
+        <h1 className="text-2xl font-bold mb-4">Přihlášení</h1>
+        {error && <div className="text-red-600 mb-2">{error}</div>}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <input
+            type="email" value={email} onChange={e => setEmail(e.target.value)}
+            placeholder="Email" required
+            className="w-full border px-3 py-2 rounded"
+          />
+          <input
+            type="password" value={password} onChange={e => setPassword(e.target.value)}
+            placeholder="Heslo" required
+            className="w-full border px-3 py-2 rounded"
+          />
+          <button
+            type="submit"
+            disabled={loading}
+            className={`w-full py-2 rounded text-white transition ${
+              loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+            }`}
+          >
+            {loading ? 'Načítám…' : 'Přihlásit'}
+          </button>
+        </form>
+      </div>
     </div>
   )
 }

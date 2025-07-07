@@ -1,7 +1,18 @@
-// react-app/tsconfig.json
+// /workspace/frontend/react-app/tsconfig.json
 {
   "compilerOptions": {
-    "jsx": "react-jsx"
+    "target": "ESNext",
+    "lib": ["DOM", "ESNext"],
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
+    // ... zbytek tvých nastavení
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["node_modules"]
 }
