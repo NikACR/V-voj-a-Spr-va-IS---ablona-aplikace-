@@ -1,59 +1,73 @@
-// src/pages/MyReservationsPage.tsx
-
 import React, { useEffect, useState } from 'react'
 import api from '../utils/api'
 
 interface Reservation {
   id_rezervace: number
-  datum_cas:    string
-  pocet_osob:   number
-  stul:         { cislo: number }
+  datum_cas: string   // ISO string
+  pocet: number       // počet osob
+  id_stul: number     // číslo stolu
 }
 
 const MyReservationsPage: React.FC = () => {
   const [reservations, setReservations] = useState<Reservation[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading]         = useState(true)
+  const [error, setError]             = useState<string | null>(null)
 
   useEffect(() => {
     api.get<Reservation[]>('/rezervace')
-      .then(res => {
-        setReservations(res.data)
+      .then(r => {
+        setReservations(r.data)
         setError(null)
       })
       .catch(() => setError('Nepodařilo se načíst rezervace.'))
       .finally(() => setLoading(false))
   }, [])
 
-  if (error) {
-    return <p className="text-red-500 text-center mt-8">{error}</p>
-  }
+  if (loading) return <p>Načítám rezervace…</p>
+  if (error)   return <p className="text-red-600">{error}</p>
 
-  if (loading) {
-    return (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="h-[150px] bg-gray-200 animate-pulse rounded" />
-        ))}
-      </div>
-    )
-  }
+  const now = new Date()
 
   return (
-    <div className="p-4">
+    <div className="p-6 max-w-xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Moje rezervace</h1>
       {reservations.length === 0 ? (
-        <p className="text-gray-600">Nemáte žádné rezervace.</p>
+        <p>Ještě nemáte žádné rezervace.</p>
       ) : (
-        <ul className="space-y-4">
-          {reservations.map(r => (
-            <li key={r.id_rezervace} className="border rounded-lg p-4 shadow-sm">
-              <p><strong>Datum:</strong> {new Date(r.datum_cas).toLocaleString()}</p>
-              <p><strong>Počet osob:</strong> {r.pocet_osob}</p>
-              <p><strong>Stůl č.:</strong> {r.stul.cislo}</p>
-            </li>
-          ))}
-        </ul>
+        reservations.map(r => {
+          const dt = new Date(r.datum_cas)
+          // lepší stavy
+          const status = dt > now
+            ? 'Očekávaná'
+            : 'Proběhla'
+
+          return (
+            <div
+              key={r.id_rezervace}
+              className="border p-4 rounded mb-4 bg-white shadow"
+            >
+              <h2 className="text-lg font-semibold mb-2">
+                Rezervace č. {r.id_rezervace}
+              </h2>
+              <p>
+                <span className="font-medium">Čas:</span>{' '}
+                {dt.toLocaleString()}
+              </p>
+              <p>
+                <span className="font-medium">Počet osob:</span>{' '}
+                {r.pocet}
+              </p>
+              <p>
+                <span className="font-medium">Stůl č.:</span>{' '}
+                {r.id_stul}
+              </p>
+              <p>
+                <span className="font-medium">Stav:</span>{' '}
+                {status}
+              </p>
+            </div>
+          )
+        })
       )}
     </div>
   )

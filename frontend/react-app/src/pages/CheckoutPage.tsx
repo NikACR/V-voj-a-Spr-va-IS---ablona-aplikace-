@@ -1,5 +1,5 @@
 // src/pages/CheckoutPage.tsx
-import React, { useState, useMemo } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCart } from '../contexts/CartContext'
 import api from '../utils/api'
@@ -8,7 +8,7 @@ const CheckoutPage: React.FC = () => {
   const { items, clear } = useCart()
   const navigate = useNavigate()
 
-  // 1) Klientské přepočty – cena i body * počet (item.qty)
+  // 1) Celková cena a body za objednávku
   const totalPrice = useMemo(
     () =>
       items.reduce((sum, item) => {
@@ -26,41 +26,59 @@ const CheckoutPage: React.FC = () => {
     [items]
   )
 
-  // 1b) Klientský odhad doby přípravy = pouze nejdelší single položka
+  // 1b) Odhad doby přípravy – nejdelší položka
   const estimatedPrepTime = useMemo(() => {
-    if (items.length === 0) return 0
-    return Math.max(...items.map(item => item.prepTime ?? 0))
+    if (!items.length) return 0
+    return Math.max(...items.map(it => it.prepTime ?? 0))
   }, [items])
 
-  // 2) Stav pro výsledek platby
+  // 2) Načtení existujících bodů z profilu
+  const [accountPoints, setAccountPoints] = useState(0)
+  useEffect(() => {
+    api
+      .get('/users/me/points')
+      .then(res => setAccountPoints(res.data.body))
+      .catch(() => setAccountPoints(0))
+  }, [])
+
+  // 3) Stavy pro platbu a výsledky
   const [method, setMethod] = useState<'cash' | 'card'>('cash')
-  const [error, setError] = useState<string>('')
+  const [applyDiscount, setApplyDiscount] = useState(false)
+  const [error, setError] = useState('')
   const [paid, setPaid] = useState(false)
   const [paidAmount, setPaidAmount] = useState(0)
-  const [earnedPoints, setEarnedPoints] = useState<number | null>(null)
-  const [prepTime, setPrepTime] = useState<number | null>(null)
+  const [earnedPoints, setEarnedPoints] = useState(0)
+  const [currentPoints, setCurrentPoints] = useState(0)
+  const [prepTime, setPrepTime] = useState(0)
+  const [discountAmount, setDiscountAmount] = useState(0)
 
-  // 3) Odeslání objednávky + platby
+  // 4) Výpočet finální ceny pro zobrazení
+  const discountedPrice = applyDiscount
+    ? Math.max(0, totalPrice - 200)
+    : totalPrice
+
+  // 5) Funkce pro odeslání objednávky a platby
   const handlePay = async () => {
     setError('')
     try {
-      // vytvoříme objednávku na backendu
+      // vytvoření objednávky
       const objedRes = await api.post('/objednavky', {
         items: items.map(item => ({
           id_menu_polozka: item.id,
-          mnozstvi: item.qty,
+          mnozstvi: item.qty ?? 1,
           cena: item.price.toFixed(2),
         })),
-        apply_discount: false,
+        apply_discount: applyDiscount,
       })
       const {
         id_objednavky,
         celkova_castka,
         body_ziskane,
-        cas_pripravy, // backend nyní vrací počet minut, nebo null
+        cas_pripravy,
+        discount_amount,
       } = objedRes.data
 
-      // provedeme platbu
+      // provedení platby
       await api.post('/platba', {
         id_objednavky,
         castka: parseFloat(celkova_castka).toFixed(2),
@@ -68,11 +86,16 @@ const CheckoutPage: React.FC = () => {
         datum: new Date().toISOString(),
       })
 
-      // uložíme výsledky
+      // načtení aktuálních bodů (jako na profilu)
+      const pointsRes = await api.get('/users/me/points')
+      const newPoints = pointsRes.data.body
+
+      // uložení výsledků
       setPaidAmount(parseFloat(celkova_castka))
       setEarnedPoints(body_ziskane)
-      // pokud backend neposlal cas_pripravy, použij náš odhad single položky
-      setPrepTime(cas_pripravy != null ? cas_pripravy : estimatedPrepTime)
+      setPrepTime(cas_pripravy ?? estimatedPrepTime)
+      setDiscountAmount(discount_amount)
+      setCurrentPoints(newPoints)
 
       clear()
       setPaid(true)
@@ -82,27 +105,38 @@ const CheckoutPage: React.FC = () => {
     }
   }
 
-  // 4) Zobrazení výsledků po zaplacení
+  // 6) Děkovací obrazovka
   if (paid) {
     return (
       <div className="p-6 max-w-md mx-auto bg-white rounded shadow text-center">
         <h2 className="text-2xl font-bold mb-4">Děkujeme za objednávku!</h2>
+
         <p className="mb-2">
           Zaplatili jste: <strong>{paidAmount.toFixed(2)} Kč</strong>
         </p>
-        {prepTime !== null && (
-          <p className="mb-2">
-            Objednávka bude hotová za: <strong>{prepTime} minut</strong>
+
+        {discountAmount > 0 && (
+          <p className="mb-2 text-green-600">
+            Sleva uplatněná: −{discountAmount} Kč
           </p>
         )}
-        {earnedPoints !== null && (
-          <p className="mb-4">
-            Body: <strong>{earnedPoints}</strong>
-          </p>
-        )}
+
+        <p className="mb-2">
+          Objednávka bude hotová za: <strong>{prepTime} minut</strong>
+        </p>
+
+        <p className="mb-2">
+          Body získané nyní: <strong>{earnedPoints}</strong>
+        </p>
+
+        {/* Celkem bodů */}
+        <p className="mb-4">
+          Celkem bodů: <strong>{currentPoints}</strong>
+        </p>
+
         <button
           onClick={() => navigate('/')}
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          className="w-full py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
         >
           Domů
         </button>
@@ -110,17 +144,37 @@ const CheckoutPage: React.FC = () => {
     )
   }
 
-  // 5) Formulář před platbou
+  // 7) Formulář potvrzení platby
   return (
     <div className="p-6 max-w-md mx-auto bg-white rounded shadow">
       <h2 className="text-2xl font-bold mb-4">Potvrzení platby</h2>
 
       <p className="mb-2">
-        Celkem: <strong>{totalPrice.toFixed(2)} Kč</strong>
+        Celkem:{' '}
+        <strong>
+          {discountedPrice.toFixed(2)} Kč
+          {applyDiscount && (
+            <span className="ml-2 text-sm text-gray-500">(−200 Kč sleva)</span>
+          )}
+        </strong>
       </p>
+
       <p className="mb-2">
-        Body: <strong>{totalPoints}</strong>
+        Body za objednávku: <strong>{totalPoints}</strong>
       </p>
+
+      {/* checkbox pro slevu */}
+      {accountPoints >= 400 && (
+        <label className="flex items-center mb-4 space-x-2">
+          <input
+            type="checkbox"
+            checked={applyDiscount}
+            onChange={() => setApplyDiscount(v => !v)}
+          />
+          <span>Uplatnit slevu 200 Kč za 400 bodů (máte {accountPoints})</span>
+        </label>
+      )}
+
       <p className="mb-4">
         Odhad přípravy: <strong>{estimatedPrepTime} minut</strong>
       </p>
@@ -151,7 +205,7 @@ const CheckoutPage: React.FC = () => {
 
       <button
         onClick={handlePay}
-        className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+        className="w-full py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
       >
         Zaplatit
       </button>
