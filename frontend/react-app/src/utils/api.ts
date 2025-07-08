@@ -1,4 +1,4 @@
-import axios from 'axios'
+import axios, { AxiosResponse } from 'axios'
 import {
   getAccessToken,
   getRefreshToken,
@@ -10,6 +10,14 @@ export interface VernostniUcet {
   id_ucet: number
   body: number
   datum_zalozeni: string
+}
+
+// --- Přidáno pro notifikace ---
+export interface ServerNotification {
+  id_notifikace: number
+  typ: string
+  text: string
+  datum_cas: string
 }
 
 const api = axios.create({
@@ -28,7 +36,6 @@ api.interceptors.response.use(
   res => res,
   async err => {
     const original = err.config
-    // pokud 401 a ještě jsme to nerezetli (_retry flag)
     if (err.response?.status === 401 && !original._retry) {
       original._retry = true
       const refresh = getRefreshToken()
@@ -39,7 +46,6 @@ api.interceptors.response.use(
             {},
             { headers: { Authorization: `Bearer ${refresh}` } }
           )
-          // uložíme nový token a zopakujeme request
           setAccessToken(data.access_token)
           api.defaults.headers.Authorization = `Bearer ${data.access_token}`
           original.headers.Authorization = `Bearer ${data.access_token}`
@@ -64,4 +70,11 @@ export function fetchPoints() {
 
 export function redeemPoints(points: number) {
   return api.post<VernostniUcet>('/users/me/redeem', { points })
+}
+
+// --- helper pro notifikace ---
+export function fetchNotifications(): Promise<ServerNotification[]> {
+  return api
+    .get<ServerNotification[]>('/users/me/notifications')
+    .then((res: AxiosResponse<ServerNotification[]>) => res.data)
 }

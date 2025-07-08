@@ -1,5 +1,3 @@
-// src/components/NavBar.tsx
-
 import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
@@ -42,38 +40,22 @@ const NavBar: React.FC = () => {
                 Menu
               </Link>
 
-              <Link to="/orders" className="hover:underline">
-                Objednávky
-              </Link>
+              <Link to="/orders" className="hover:underline">Objednávky</Link>
+              <Link to="/reservations" className="hover:underline">Rezervace</Link>
+              <Link to="/new-reservation" className="hover:underline">Nová rezervace</Link>
+              <Link to="/events" className="hover:underline">Firemní akce</Link>
+              {/* přidáno: odkaz na Workshopy */}
+              <Link to="/workshops" className="hover:underline">Workshopy</Link>
 
-              <Link to="/reservations" className="hover:underline">
-                Rezervace
-              </Link>
-
-              <Link to="/new-reservation" className="hover:underline">
-                Nová rezervace
-              </Link>
-
-              <Link to="/events" className="hover:underline">
-                Firemní akce
-              </Link>
-
-              <Link to="/users" className="hover:underline">
-                Uživatelé
-              </Link>
+              <Link to="/users" className="hover:underline">Uživatelé</Link>
 
               {user.roles.includes('admin') && (
-                <Link
-                  to="/admin"
-                  className="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700"
-                >
+                <Link to="/admin" className="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700">
                   Admin
                 </Link>
               )}
 
-              <Link to="/profile" className="hover:underline">
-                Profil
-              </Link>
+              <Link to="/profile" className="hover:underline">Profil</Link>
 
               {/* Notifications bell */}
               <div className="relative">
@@ -101,9 +83,9 @@ const NavBar: React.FC = () => {
                             n.read ? 'bg-gray-100' : 'bg-white hover:bg-gray-50'
                           }`}
                         >
-                          <p className="text-sm">{n.message}</p>
+                          <p className="text-sm">{n.text}</p>
                           <p className="text-xs text-gray-400">
-                            {n.timestamp.toLocaleTimeString()}
+                            {n.timestamp.toLocaleString()}
                           </p>
                         </div>
                       ))
@@ -121,10 +103,7 @@ const NavBar: React.FC = () => {
                 )}
               </Link>
 
-              <button
-                onClick={handleLogout}
-                className="ml-4 text-red-600 hover:underline"
-              >
+              <button onClick={handleLogout} className="ml-4 text-red-600 hover:underline">
                 Odhlásit se
               </button>
             </>

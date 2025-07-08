@@ -1,57 +1,69 @@
 // src/contexts/NotificationsContext.tsx
+import React, { createContext, useContext, useEffect, useState } from 'react'
+import { fetchNotifications, ServerNotification } from '../utils/api'
 
-import React, {
-  createContext,
-  useContext,
-  useState,
-  ReactNode,
-} from 'react'
-
-export type Notification = {
+export interface Notification {
   id: number
-  message: string
+  typ: string
+  text: string
   timestamp: Date
   read: boolean
 }
 
-type NotificationsContextType = {
+interface NotificationsContextValue {
   notifications: Notification[]
-  addNotification: (message: string) => void
+  unreadCount: number
   markAsRead: (id: number) => void
+  markAllAsRead: () => void
 }
 
-const NotificationsContext = createContext<NotificationsContextType | undefined>(undefined)
+const NotificationsContext = createContext<NotificationsContextValue | undefined>(undefined)
 
-let nextNotificationId = 1
-
-export const NotificationsProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const NotificationsProvider: React.FC<React.PropsWithChildren<{}>> = ({ children }) => {
   const [notifications, setNotifications] = useState<Notification[]>([])
 
-  const addNotification = (message: string) => {
-    const newNotif: Notification = {
-      id: nextNotificationId++,
-      message,
-      timestamp: new Date(),
-      read: false,
-    }
-    setNotifications(prev => [newNotif, ...prev])
-  }
+  useEffect(() => {
+    fetchNotifications()
+      .then(serverNotifs => {
+        const mapped = serverNotifs.map(n => ({
+          id:        n.id_notifikace,
+          typ:       n.typ,
+          text:      n.text,
+          timestamp: new Date(n.datum_cas),
+          read:      false
+        }))
+        setNotifications(mapped)
+      })
+      .catch(err => {
+        console.error('Chyba při načítání notifikací:', err)
+      })
+  }, [])
 
   const markAsRead = (id: number) => {
-    setNotifications(prev =>
-      prev.map(n => (n.id === id ? { ...n, read: true } : n))
+    setNotifications(nots =>
+      nots.map(n => n.id === id ? { ...n, read: true } : n)
     )
   }
 
+  const markAllAsRead = () => {
+    setNotifications(nots =>
+      nots.map(n => ({ ...n, read: true }))
+    )
+  }
+
+  const unreadCount = notifications.filter(n => !n.read).length
+
   return (
-    <NotificationsContext.Provider value={{ notifications, addNotification, markAsRead }}>
+    <NotificationsContext.Provider value={{ notifications, unreadCount, markAsRead, markAllAsRead }}>
       {children}
     </NotificationsContext.Provider>
   )
 }
 
-export const useNotifications = () => {
+export const useNotifications = (): NotificationsContextValue => {
   const ctx = useContext(NotificationsContext)
-  if (!ctx) throw new Error('useNotifications must be used within NotificationsProvider')
+  if (!ctx) {
+    throw new Error('useNotifications musí být zavoláno v rámci NotificationsProvider')
+  }
   return ctx
 }
